@@ -1,0 +1,4 @@
+{
+  "_comment": "Map a model key to a .glb file in this folder. Only listed files are fetched; everything else uses procedural fallback geometry. Example: \"scooter\": { \"file\": \"scooter.glb\", \"scale\": 1, \"rotationY\": 0, \"offsetY\": 0 }",
+  "models": {}
+}

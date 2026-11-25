@@ -1,0 +1,22 @@
+{
+  "name": "atakent-okul-hikayesi",
+  "private": true,
+  "version": "0.1.0",
+  "description": "GTA-inspired first-person open-world school sim set around Hasan Şükran Saruhan Ortaokulu, Atakent / Etimesgut / Ankara",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase": "^11.0.2",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.170.0",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.1"
+  }
+}
