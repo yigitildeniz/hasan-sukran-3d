@@ -22,6 +22,7 @@ import { AuthorityNPC } from '../entities/AuthorityNPC';
 import { FriendlyNPC } from '../entities/FriendlyNPC';
 import { LOOKS } from '../entities/Character';
 import { HUD } from '../ui/HUD';
+import { ModMenu } from '../ui/ModMenu';
 
 /**
  * Main game coordinator tying together the Three.js renderer, GTA 6-inspired
@@ -47,6 +48,8 @@ export class Game {
   private shops: ShopSystem;
   private audio = new SoundEngine();
   private hud: HUD;
+  private modMenu: ModMenu;
+  private speedMultiplier = 1;
 
   private clock = new THREE.Clock();
   private elapsed = 0;
@@ -235,8 +238,79 @@ export class Game {
       },
     });
 
+    this.modMenu = new ModMenu(
+      hudHost,
+      [
+        { id: 'school-front', label: 'Okul Önü' },
+        { id: 'shops-parking', label: 'Dükkanlar / Otopark' },
+        { id: 'ataturk', label: 'Atatürk Köşesi' },
+        { id: 'class-6g', label: '6-G Sınıfı' },
+        { id: 'park', label: 'Atakent Parkı' },
+      ],
+      {
+        onToggleOpen: (open) => {
+          if (open) {
+            if (document.pointerLockElement) document.exitPointerLock();
+            this.hud.setPaused(false, this.startedOnce, this.highScore);
+            this.audio.setEngine(false, 0, false);
+          } else {
+            if (this.startedOnce) {
+              this.input.requestLock();
+            } else {
+              this.hud.setPaused(true, false, this.highScore);
+            }
+          }
+        },
+        onSpeedChange: (mult) => {
+          this.speedMultiplier = mult;
+          this.player.speedMultiplier = mult;
+        },
+        onTeleport: (id) => this.teleportToPreset(id),
+        onCompleteCurrentMission: () => {
+          if (!this.missions.completeCurrentMission()) {
+            this.hud.showToast('Mod Menü', 'Tüm görevler zaten tamamlanmış.', 'gold');
+          }
+        },
+        onCompleteAllMissions: () => {
+          this.missions.completeAllMissions();
+          this.hud.showToast('Mod Menü', 'Tüm görevler tamamlandı!', 'green');
+        },
+        onResetMissions: () => {
+          this.missions.restartCampaign();
+          this.hud.showToast('Mod Menü', 'Görevler baştan başlatıldı.', 'gold');
+        },
+        onClearHeat: () => {
+          this.heat.clear();
+          for (const npc of this.authorities) npc.resetToPatrol();
+          this.hud.showToast('Mod Menü', 'Alarm ve takip sıfırlandı.', 'green');
+        },
+        onGrantPoints: (pts) => {
+          this.missions.score += pts;
+          this.audio.pickup();
+          this.persistProgress();
+          this.hud.showToast('Mod Menü', `+${pts} Puan eklendi!`, 'green');
+        },
+        onGrantMoney: (amount) => {
+          this.shops.addMoney(amount);
+          this.audio.pickup();
+          this.hud.showToast('Mod Menü', `+₺${amount} Harçlık eklendi!`, 'gold');
+        },
+        onGrantStationery: () => this.shops.grantAllStationery(),
+        onGrantHotNoodle: () => this.shops.grantHotNoodle(),
+        onRefillStamina: () => {
+          this.player.stamina = CONFIG.player.staminaMax;
+          this.audio.pickup();
+          this.hud.showToast('Mod Menü', 'Enerji %100 dolduruldu!', 'green');
+        },
+      },
+    );
+
     this.input.onLockChange = (locked) => {
-      this.hud.setPaused(!locked, this.startedOnce, this.highScore);
+      if (this.modMenu.open) {
+        this.hud.setPaused(false, this.startedOnce, this.highScore);
+      } else {
+        this.hud.setPaused(!locked, this.startedOnce, this.highScore);
+      }
       if (!locked) this.audio.setEngine(false, 0, false);
     };
 
@@ -309,6 +383,27 @@ export class Game {
     this.persistProgress();
   }
 
+  private teleportToPreset(id: string): void {
+    if (this.player.vehicle) {
+      this.player.exitVehicle(this.world.collision);
+    }
+    const targets: Record<string, { pos: THREE.Vector3; yaw: number; label: string }> = {
+      'school-front': { pos: new THREE.Vector3(-8, 0, 29.2), yaw: 0, label: 'Okul Önü' },
+      'shops-parking': { pos: new THREE.Vector3(73, 0, -4), yaw: -Math.PI / 2, label: 'Dükkanlar / Otopark' },
+      ataturk: { pos: new THREE.Vector3(-22.2, 0, -6.2), yaw: 0, label: 'Atatürk Köşesi' },
+      'class-6g': { pos: new THREE.Vector3(2.2, 0.6, -22.2), yaw: 0, label: '6-G Sınıfı' },
+      park: { pos: new THREE.Vector3(92, 0, 78), yaw: -Math.PI / 4, label: 'Atakent Parkı' },
+    };
+    const dest = targets[id];
+    if (!dest) return;
+    this.player.teleport(dest.pos, dest.yaw);
+    // Sync camera immediately so the destination is visible right behind the Mod Menu
+    this.camera.position.set(dest.pos.x, dest.pos.y + CONFIG.player.eye, dest.pos.z);
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(0, dest.yaw, 0);
+    this.hud.showToast('Işınlanıldı', dest.label, 'gold', 2.2);
+  }
+
   private persistProgress(): void {
     this.highScore = Math.max(this.highScore, this.missions.score);
     progressService.save({
@@ -327,8 +422,9 @@ export class Game {
     for (const up of this.world.updaters) up(this.elapsed, dt);
 
     if (this.input.locked) {
-      // Utility toggles
-      if (this.input.wasPressed('KeyM')) {
+      // Utility toggles (avoid muting on Ctrl+Shift+M Mod Menu shortcut)
+      const ctrlHeld = this.input.isDown('ControlLeft') || this.input.isDown('ControlRight');
+      if (this.input.wasPressed('KeyM') && !ctrlHeld) {
         this.audio.muted = !this.audio.muted;
         this.hud.showToast(this.audio.muted ? 'Ses Kapatıldı' : 'Ses Açıldı', '', 'gold', 1.6);
       }
@@ -374,7 +470,7 @@ export class Game {
 
         // Update vehicles
         for (const v of this.vehicles) {
-          v.update(dt, v.occupied ? this.input : null, this.world.collision);
+          v.update(dt, v.occupied ? this.input : null, this.world.collision, v.occupied ? this.speedMultiplier : 1);
         }
 
         // Update player & footsteps
@@ -509,6 +605,7 @@ export class Game {
 
   dispose(): void {
     cancelAnimationFrame(this.rafId);
+    this.modMenu.dispose();
     this.renderer.dispose();
   }
 }

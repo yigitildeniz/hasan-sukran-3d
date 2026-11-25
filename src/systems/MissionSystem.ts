@@ -112,6 +112,37 @@ export class MissionSystem {
     this.setupMission(0);
   }
 
+  /** Dev/Mod Menu helper: immediately completes the currently active mission. */
+  completeCurrentMission(): boolean {
+    if (this.missionIndex === 0) {
+      this.completeMission('Sabah Yoklaması: 6-G', 250);
+      this.setupMission(1);
+      return true;
+    }
+    if (this.missionIndex === 1) {
+      for (const p of this.pages) {
+        p.collected = true;
+        p.mesh.visible = false;
+      }
+      this.completeMission('Kayıp Sınav Kâğıtları', 350);
+      this.setupMission(2);
+      return true;
+    }
+    if (this.missionIndex === 2) {
+      this.completeMission('Atakent Simit Operasyonu', 500);
+      this.setupMission(3);
+      return true;
+    }
+    return false;
+  }
+
+  /** Dev/Mod Menu helper: completes all remaining missions at once. */
+  completeAllMissions(): void {
+    while (this.missionIndex < 3) {
+      this.completeCurrentMission();
+    }
+  }
+
   private setupMission(index: number): void {
     this.missionIndex = index;
     this.step = 0;

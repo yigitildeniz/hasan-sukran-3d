@@ -42,6 +42,24 @@ export class ShopSystem {
     this.money += amount;
   }
 
+  /** Dev/Mod Menu helper: grants all Aktaş Kırtasiye stationery items. */
+  grantAllStationery(): void {
+    for (const item of this.spots.stationery) {
+      this.stationeryOwned.add(item.id);
+    }
+    this.cb.onPickup();
+    this.cb.onToast('Mod Menü', 'Tüm Aktaş Kırtasiye ürünleri çantana eklendi!', 'green');
+  }
+
+  /** Dev/Mod Menu helper: gives a ready-to-drink hot noodle cup. */
+  grantHotNoodle(): void {
+    this.noodleState = 'hot';
+    this.boilProgress = 1;
+    this.boilTimer = BOIL_DURATION;
+    this.cb.onPickup();
+    this.cb.onToast('Mod Menü', 'Hazır Sıcak Noodle eklendi! İçmek için [Q] tuşuna bas.', 'green');
+  }
+
   /** Returns [E] prompt text when player is near a shop counter/shelf/kettle. */
   getPrompt(playerPos: THREE.Vector3, inVehicle: boolean): string | null {
     if (inVehicle) return null;

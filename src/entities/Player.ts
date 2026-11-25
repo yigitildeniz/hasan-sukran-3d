@@ -25,6 +25,7 @@ export class Player {
   sprinting = false;
   hidden = false;
   speed = 0;
+  speedMultiplier = 1;
   vehicle: Vehicle | null = null;
 
   private smoothYaw = 0;
@@ -165,11 +166,12 @@ export class Player {
       this.stamina = Math.min(CONFIG.player.staminaMax, this.stamina + regen * dt);
     }
 
-    const maxSpd = this.crouching
-      ? CONFIG.player.crouchSpeed
-      : this.sprinting
-        ? CONFIG.player.sprintSpeed
-        : CONFIG.player.walkSpeed;
+    const maxSpd =
+      (this.crouching
+        ? CONFIG.player.crouchSpeed
+        : this.sprinting
+          ? CONFIG.player.sprintSpeed
+          : CONFIG.player.walkSpeed) * this.speedMultiplier;
 
     const sin = Math.sin(this.smoothYaw);
     const cos = Math.cos(this.smoothYaw);

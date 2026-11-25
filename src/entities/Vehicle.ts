@@ -151,8 +151,9 @@ export class Vehicle {
     return Math.round(Math.abs(this.speed) * 3.6);
   }
 
-  update(dt: number, input: Input | null, collision: CollisionWorld): void {
+  update(dt: number, input: Input | null, collision: CollisionWorld, speedMultiplier = 1): void {
     const s = this.spec;
+    const mult = Math.max(0.5, speedMultiplier);
     let throttle = 0;
     let steerInput = 0;
     let braking = false;
@@ -164,13 +165,13 @@ export class Vehicle {
     }
 
     if (braking && this.occupied) {
-      const decel = s.brake * dt;
+      const decel = s.brake * mult * dt;
       if (Math.abs(this.speed) <= decel) this.speed = 0;
       else this.speed -= Math.sign(this.speed) * decel;
     } else if (throttle > 0) {
-      this.speed = Math.min(s.maxSpeed, this.speed + s.accel * dt);
+      this.speed = Math.min(s.maxSpeed * mult, this.speed + s.accel * mult * dt);
     } else if (throttle < 0) {
-      this.speed = Math.max(-s.reverseSpeed, this.speed - s.accel * 0.8 * dt);
+      this.speed = Math.max(-s.reverseSpeed * mult, this.speed - s.accel * mult * 0.8 * dt);
     } else {
       const drag = s.drag * dt;
       if (Math.abs(this.speed) <= drag) this.speed = 0;
