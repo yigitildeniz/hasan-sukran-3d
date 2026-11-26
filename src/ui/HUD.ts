@@ -71,10 +71,17 @@ export class HUD {
   private overlaySubEl: HTMLElement;
   private detentionEl: HTMLElement;
   private detentionSubEl: HTMLElement;
+  private muteBtnEl: HTMLButtonElement;
 
   private toastTimer = 0;
+  private minimapAccum = 0;
 
-  constructor(container: HTMLElement, mapFeatures: MapFeature[], onPlayClick: () => void) {
+  constructor(
+    container: HTMLElement,
+    mapFeatures: MapFeature[],
+    onPlayClick: () => void,
+    onMuteClick: () => void,
+  ) {
     this.minimap = new Minimap(mapFeatures);
 
     container.innerHTML = `
@@ -165,6 +172,8 @@ export class HUD {
         <span><b>M</b> Ses</span>
       </div>
 
+      <button type="button" class="hud-panel mute-btn" title="Sesi Aç / Kapat (M)">🔊 Ses Açık [M]</button>
+
       <div class="detention-banner">
         <div class="detention-title">YAKALANDIN!</div>
         <div class="detention-sub">Müdür Odası’nda kısa bir uyarı aldın...</div>
@@ -229,8 +238,18 @@ export class HUD {
     this.overlaySubEl = container.querySelector('.overlay-sub')!;
     this.detentionEl = container.querySelector('.detention-banner')!;
     this.detentionSubEl = container.querySelector('.detention-sub')!;
+    this.muteBtnEl = container.querySelector('.mute-btn')!;
 
     this.playBtnEl.addEventListener('click', () => onPlayClick());
+    this.muteBtnEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onMuteClick();
+    });
+  }
+
+  setMuted(muted: boolean): void {
+    this.muteBtnEl.classList.toggle('muted', muted);
+    this.muteBtnEl.textContent = muted ? '🔇 Sessiz [M]' : '🔊 Ses Açık [M]';
   }
 
   setPaused(paused: boolean, startedOnce: boolean, highScore = 0): void {
@@ -343,16 +362,20 @@ export class HUD {
       this.promptFEl.classList.remove('visible');
     }
 
-    // Minimap
-    this.minimap.render(
-      state.playerPos,
-      state.playerYaw,
-      !!state.vehicle,
-      state.npcs,
-      state.vehicles,
-      state.mission.targetPos,
-      state.mission.targetColor,
-      state.time,
-    );
+    // Minimap (throttled to ~20 Hz for smooth FPS without needless 60 Hz 2D canvas redraws)
+    this.minimapAccum += dt;
+    if (this.minimapAccum >= 0.05) {
+      this.minimapAccum = 0;
+      this.minimap.render(
+        state.playerPos,
+        state.playerYaw,
+        !!state.vehicle,
+        state.npcs,
+        state.vehicles,
+        state.mission.targetPos,
+        state.mission.targetColor,
+        state.time,
+      );
+    }
   }
 }

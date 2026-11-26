@@ -14,6 +14,9 @@ export interface ShopHUDState {
 export interface ShopCallbacks {
   onToast: (title: string, detail?: string, tone?: 'gold' | 'green' | 'red') => void;
   onPickup: () => void;
+  onInteract?: () => void;
+  onKettleStart?: () => void;
+  onNoodleReady?: () => void;
   onAddScore: (pts: number) => void;
   onRestoreStamina: () => void;
 }
@@ -140,6 +143,7 @@ export class ShopSystem {
 
     // 2) Manav & Kasap — non-purchasable
     if (Math.hypot(playerPos.x - this.spots.manavKasap.x, playerPos.z - this.spots.manavKasap.z) <= 3.2) {
+      this.cb.onInteract?.();
       this.cb.onToast('Manav & Kasap', 'Şu an perakende satış yapılmıyor (buradan ürün satın alınamaz).', 'gold');
       return true;
     }
@@ -178,7 +182,7 @@ export class ShopSystem {
         this.noodleState = 'boiling';
         this.boilTimer = 0;
         this.boilProgress = 0;
-        this.cb.onPickup();
+        this.cb.onKettleStart?.();
         this.cb.onToast('Kettle Çalıştı!', 'Su kaynıyor ve noodle bardağına sıcak su ekleniyor...', 'gold');
         return true;
       }
@@ -189,6 +193,7 @@ export class ShopSystem {
       if (this.noodleState === 'hot') {
         return this.consumeHotNoodle();
       }
+      this.cb.onInteract?.();
       this.cb.onToast('Kardeşler Market', 'Önce Noodle Rafı’ndan noodle satın al (₺30).', 'gold');
       return true;
     }
@@ -222,7 +227,7 @@ export class ShopSystem {
       if (this.boilTimer >= BOIL_DURATION) {
         this.noodleState = 'hot';
         this.boilProgress = 1;
-        this.cb.onPickup();
+        this.cb.onNoodleReady?.();
         this.cb.onToast('Sıcak Noodle Hazır!', 'İçmek için tezgâhta [E] veya her yerden [Q] tuşuna bas!', 'green');
       }
     }

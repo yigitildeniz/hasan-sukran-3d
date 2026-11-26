@@ -36,6 +36,12 @@ export class Player {
   private currentFov = 72;
   private vehicleCamSnap = false;
   private inThirdPerson = false;
+  private shake = 0;
+
+  /** Short camera shake (collisions, hard braking). amount 0..1 */
+  addShake(amount: number): void {
+    this.shake = Math.min(1, this.shake + amount);
+  }
 
   constructor(scene: THREE.Scene) {
     this.model = new CharacterModel(LOOKS.student);
@@ -313,16 +319,29 @@ export class Player {
     }
 
     camera.rotation.order = 'YXZ';
+    const speedK = THREE.MathUtils.clamp(Math.abs(v.speed) / Math.max(1, v.maxSpeed), 0, 1.2);
+    // Brake dive / acceleration squat pitch (negative longAccel = braking = look slightly down)
+    const accelTilt = THREE.MathUtils.clamp(v.longAccel * 0.0035, -0.06, 0.035);
+    // Shake decays quickly; random jitter scaled by intensity
+    this.shake *= Math.exp(-dt * 6.5);
+    const sh = this.shake;
+    const jx = (Math.random() - 0.5) * sh * 0.14;
+    const jy = (Math.random() - 0.5) * sh * 0.1;
+    const jroll = (Math.random() - 0.5) * sh * 0.05;
+
     if (thirdPerson) {
       const cfg = v.getChaseCameraConfig();
       const camYaw = this.smoothYaw;
       const clampedPitch = THREE.MathUtils.clamp(this.smoothPitch, -0.35, 0.35);
+      // Pull the chase camera back & up a little as speed builds
+      const dist = cfg.dist + speedK * 1.8;
+      const height = cfg.height + speedK * 0.35;
 
       const pivot = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z);
       const desired = new THREE.Vector3(
-        v.pos.x + Math.sin(camYaw) * cfg.dist,
-        Math.max(v.pos.y + 1.25, v.pos.y + cfg.height - clampedPitch * 1.6),
-        v.pos.z + Math.cos(camYaw) * cfg.dist,
+        v.pos.x + Math.sin(camYaw) * dist,
+        Math.max(v.pos.y + 1.25, v.pos.y + height - clampedPitch * 1.6),
+        v.pos.z + Math.cos(camYaw) * dist,
       );
 
       // Collision-safe pullback so the chase camera never clips inside walls/buildings
@@ -354,18 +373,28 @@ export class Player {
 
       const lookAt = new THREE.Vector3(
         v.pos.x - Math.sin(v.heading) * cfg.lookAhead,
-        v.pos.y + cfg.lookHeight,
+        v.pos.y + cfg.lookHeight + accelTilt * 6,
         v.pos.z - Math.cos(v.heading) * cfg.lookAhead,
       );
+      camera.position.x += jx;
+      camera.position.y += jy;
       camera.lookAt(lookAt);
+      camera.rotateZ(jroll);
+      camera.position.x -= jx;
+      camera.position.y -= jy;
     } else {
       // First-person cockpit / handlebar camera: attached directly (zero lag behind seat/roof!)
       const eyeWorld = v.getFirstPersonEyeWorld();
+      // Lean back slightly with speed (head pressed back), forward under braking
+      const back = speedK * 0.1 - accelTilt * 0.6;
+      eyeWorld.x += Math.sin(v.heading) * back + jx * 0.5;
+      eyeWorld.z += Math.cos(v.heading) * back;
+      eyeWorld.y += jy * 0.5;
       camera.position.copy(eyeWorld);
       this.vehicleCamSnap = false;
       camera.rotation.y = this.smoothYaw;
-      camera.rotation.x = THREE.MathUtils.clamp(this.smoothPitch, -0.42, 0.48);
-      camera.rotation.z = -v.steer * Math.min(1, Math.abs(v.speed) / 14) * (v.kind === 'car' ? 0.025 : 0.09);
+      camera.rotation.x = THREE.MathUtils.clamp(this.smoothPitch + accelTilt, -0.45, 0.5);
+      camera.rotation.z = -v.steer * Math.min(1, Math.abs(v.speed) / 14) * (v.kind === 'car' ? 0.025 : 0.09) + jroll;
     }
 
     const targetFov = 74 + Math.min(13, Math.abs(v.speed) * 0.65);

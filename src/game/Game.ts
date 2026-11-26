@@ -15,11 +15,13 @@ import { Environment } from '../world/Environment';
 import { PropField } from '../world/Props';
 import { buildSchool, type SchoolSpots } from '../world/School';
 import { buildAtakent, type AtakentSpots } from '../world/Atakent';
+import { surfaceAt } from '../world/surfaces';
 import type { WorldContext, Zone } from '../world/types';
 import { Player } from '../entities/Player';
 import { Vehicle } from '../entities/Vehicle';
 import { AuthorityNPC } from '../entities/AuthorityNPC';
 import { FriendlyNPC } from '../entities/FriendlyNPC';
+import { MarketDuo } from '../entities/MarketDuo';
 import { LOOKS } from '../entities/Character';
 import { HUD } from '../ui/HUD';
 import { ModMenu } from '../ui/ModMenu';
@@ -43,6 +45,7 @@ export class Game {
   private vehicles: Vehicle[] = [];
   private authorities: AuthorityNPC[] = [];
   private friendlies: FriendlyNPC[] = [];
+  private marketDuo: MarketDuo;
   private heat = new HeatSystem();
   private missions: MissionSystem;
   private shops: ShopSystem;
@@ -58,6 +61,8 @@ export class Game {
   private detentionLockTimer = 0;
   private highScore = 0;
   private rafId = 0;
+  private schoolBellTimer = 24;
+  private schoolBellHeardOnce = false;
 
   constructor(canvasHost: HTMLElement, hudHost: HTMLElement) {
     // Renderer
@@ -71,7 +76,7 @@ export class Game {
     canvasHost.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.08, 1200);
+    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.08, 760);
     // Layer 0 = world + vehicles + NPCs; layer 1 = first-person body (only seen by sun shadows & mirror)
     this.camera.layers.set(0);
 
@@ -208,12 +213,27 @@ export class Game {
       ),
     ];
 
-    // HUD + Missions
-    this.hud = new HUD(hudHost, this.world.map, () => {
-      this.audio.unlock();
-      this.startedOnce = true;
-      this.input.requestLock();
-    });
+    this.marketDuo = new MarketDuo(this.scene, this.world.collision);
+
+    // HUD + Audio auto-unlock + Missions
+    this.audio.attachAutoUnlock();
+    this.hud = new HUD(
+      hudHost,
+      this.world.map,
+      () => {
+        this.audio.unlock();
+        this.startedOnce = true;
+        this.input.requestLock();
+      },
+      () => {
+        this.audio.unlock();
+        const muted = this.audio.toggleMute();
+        this.hud.showToast(muted ? 'Ses Kapatıldı' : 'Ses Açıldı', '', 'gold', 1.5);
+      },
+    );
+    this.hud.setMuted(this.audio.muted);
+    this.audio.onMuteChange = (muted) => this.hud.setMuted(muted);
+    window.addEventListener('blur', () => this.audio.silenceLoops());
 
     this.missions = new MissionSystem(this.scene, this.schoolSpots, this.atakentSpots, {
       onToast: (title, detail, tone) => this.hud.showToast(title, detail, tone),
@@ -229,6 +249,9 @@ export class Game {
     this.shops = new ShopSystem(this.atakentSpots.commercial, {
       onToast: (title, detail, tone) => this.hud.showToast(title, detail, tone),
       onPickup: () => this.audio.pickup(),
+      onInteract: () => this.audio.interact(),
+      onKettleStart: () => this.audio.kettleClick(),
+      onNoodleReady: () => this.audio.noodleReady(),
       onAddScore: (pts) => {
         this.missions.score += pts;
         this.persistProgress();
@@ -252,7 +275,7 @@ export class Game {
           if (open) {
             if (document.pointerLockElement) document.exitPointerLock();
             this.hud.setPaused(false, this.startedOnce, this.highScore);
-            this.audio.setEngine(false, 0, false);
+            this.audio.silenceLoops();
           } else {
             if (this.startedOnce) {
               this.input.requestLock();
@@ -311,7 +334,7 @@ export class Game {
       } else {
         this.hud.setPaused(!locked, this.startedOnce, this.highScore);
       }
-      if (!locked) this.audio.setEngine(false, 0, false);
+      if (!locked) this.audio.silenceLoops();
     };
 
     window.addEventListener('resize', () => this.onResize());
@@ -425,8 +448,8 @@ export class Game {
       // Utility toggles (avoid muting on Ctrl+Shift+M Mod Menu shortcut)
       const ctrlHeld = this.input.isDown('ControlLeft') || this.input.isDown('ControlRight');
       if (this.input.wasPressed('KeyM') && !ctrlHeld) {
-        this.audio.muted = !this.audio.muted;
-        this.hud.showToast(this.audio.muted ? 'Ses Kapatıldı' : 'Ses Açıldı', '', 'gold', 1.6);
+        const muted = this.audio.toggleMute();
+        this.hud.showToast(muted ? 'Ses Kapatıldı' : 'Ses Açıldı', '', 'gold', 1.6);
       }
       if (this.input.wasPressed('KeyV') && this.player.vehicle) {
         this.thirdPersonVehicle = !this.thirdPersonVehicle;
@@ -450,30 +473,46 @@ export class Game {
         const nearV = this.nearestVehicle();
         if (this.input.wasPressed('KeyF')) {
           if (this.player.vehicle) {
+            const exitedKind = this.player.vehicle.kind;
             this.player.exitVehicle(this.world.collision);
+            this.audio.vehicleExit(exitedKind);
           } else if (nearV) {
             this.player.enterVehicle(nearV, this.thirdPersonVehicle);
+            this.audio.vehicleEnter(nearV.kind);
             this.hud.showToast(nearV.name, 'Sürmek için WASD · Fren: Space · Kamera: [V]', 'green', 2.4);
           }
         }
 
-        // Mission / shop / world interaction
+        // Mission / shop / Zümra & Nisa / world interaction
         if (this.input.wasPressed('KeyE')) {
           const handled = this.missions.tryInteract(this.player.pos, !!this.player.vehicle);
-          if (!handled) {
-            this.shops.tryInteract(this.player.pos, !!this.player.vehicle);
+          if (handled) {
+            this.audio.interact();
+          } else if (!this.shops.tryInteract(this.player.pos, !!this.player.vehicle)) {
+            const duoLines = this.marketDuo.tryInteract(this.player.pos, !!this.player.vehicle);
+            if (duoLines) {
+              this.audio.interact();
+              this.hud.showToast(
+                `Zümra: "${duoLines.zumra}"`,
+                `Nisa: "${duoLines.nisa}"`,
+                'gold',
+                4.8,
+              );
+            }
           }
         }
         if (this.input.wasPressed('KeyQ')) {
           this.shops.consumeHotNoodle();
         }
 
-        // Update vehicles
+        // Update vehicles + distance visibility culling for FPS
         for (const v of this.vehicles) {
+          const dist = Math.hypot(v.pos.x - this.player.pos.x, v.pos.z - this.player.pos.z);
+          v.root.visible = v.occupied || dist < 175;
           v.update(dt, v.occupied ? this.input : null, this.world.collision, v.occupied ? this.speedMultiplier : 1);
         }
 
-        // Update player & footsteps
+        // Update player & surface-aware footsteps
         const stepSound = this.player.update(
           dt,
           this.input,
@@ -482,18 +521,47 @@ export class Game {
           this.camera,
           this.thirdPersonVehicle,
         );
-        if (stepSound) this.audio.footstep(this.player.sprinting);
-
-        // Engine sound
-        if (this.player.vehicle) {
-          this.audio.setEngine(true, this.player.vehicle.speed, this.player.vehicle.kind === 'escooter');
-        } else {
-          this.audio.setEngine(false, 0, false);
+        if (stepSound) {
+          this.audio.footstep(this.player.sprinting, surfaceAt(this.player.pos.x, this.player.pos.z).kind);
         }
 
-        // Zone & infractions
+        // Engine, tyre skid, crash impact audio & camera shake feedback
+        const activeV = this.player.vehicle;
+        if (activeV) {
+          this.audio.setEngine({
+            kind: activeV.kind,
+            speed: activeV.speed,
+            maxSpeed: activeV.maxSpeed * this.speedMultiplier,
+            throttle: activeV.throttle,
+          });
+          const brakeSkid = activeV.braking && Math.abs(activeV.speed) > 4 ? Math.min(1, Math.abs(activeV.speed) / 14) : 0;
+          const slipSkid = activeV.slip > 0.16 && Math.abs(activeV.speed) > 3.5 ? activeV.slip : 0;
+          this.audio.setSkid(Math.max(brakeSkid * 0.75, slipSkid));
+          if (activeV.impact > 1.8) {
+            this.audio.crash(activeV.impact);
+            this.player.addShake(Math.min(0.85, activeV.impact / 11));
+          } else if (activeV.braking && Math.abs(activeV.speed) > 8) {
+            this.player.addShake(0.06 * dt * 10);
+          }
+        } else {
+          this.audio.setEngine(null);
+          this.audio.setSkid(0);
+        }
+
+        // Zone, ambient school bell & infractions
         const zone = this.currentZone();
         const inSchool = !!zone?.school;
+        if (inSchool && !this.schoolBellHeardOnce) {
+          this.schoolBellHeardOnce = true;
+          this.audio.schoolBell();
+        }
+        this.schoolBellTimer -= dt;
+        if (this.schoolBellTimer <= 0) {
+          this.schoolBellTimer = 85;
+          if (Math.hypot(this.player.pos.x + 8, this.player.pos.z + 6) < 95) {
+            this.audio.schoolBell();
+          }
+        }
         const restricted = !!zone?.restricted;
         const vehicleInSchool = inSchool && !!this.player.vehicle;
         const infiltrating = restricted || vehicleInSchool;
@@ -551,12 +619,18 @@ export class Game {
           this.triggerDetention(caughtBy);
         }
 
-        // Friendly NPCs, Shops & Missions
-        for (const f of this.friendlies) f.update(dt, this.player.pos);
+        // Friendly NPCs (distance-culled for FPS), Market Duo, Shops (kettle pour loop) & Missions
+        for (const f of this.friendlies) {
+          const d = Math.hypot(f.pos.x - this.player.pos.x, f.pos.z - this.player.pos.z);
+          f.model.root.visible = d < 140;
+          if (d < 90) f.update(dt, this.player.pos);
+        }
+        this.marketDuo.update(dt, this.player.pos);
         this.missions.update(this.elapsed, this.player.pos);
         if (this.shops.update(dt, this.elapsed)) {
           this.audio.boilBubble();
         }
+        this.audio.setPour(this.shops.noodleState === 'boiling');
       }
 
       this.input.endFrame();
@@ -576,6 +650,8 @@ export class Game {
     const nearV = this.player.vehicle ? null : this.nearestVehicle();
     const missionPrompt = this.missions.getInteractionPrompt(this.player.pos);
     const shopPrompt = missionPrompt ? null : this.shops.getPrompt(this.player.pos, !!this.player.vehicle);
+    const duoPrompt =
+      missionPrompt || shopPrompt ? null : this.marketDuo.getPrompt(this.player.pos, !!this.player.vehicle);
     const shopState = this.shops.hudState();
     this.hud.update(dt, {
       playerPos: this.player.pos,
@@ -588,7 +664,7 @@ export class Game {
       heat: this.heat.snapshot(),
       mission: this.missions.hudState(),
       shop: shopState,
-      interactPrompt: missionPrompt ?? shopPrompt,
+      interactPrompt: missionPrompt ?? shopPrompt ?? duoPrompt,
       consumePrompt: shopState.noodleState === 'hot' ? 'Sıcak Noodle İç (+Enerji)' : null,
       vehiclePrompt: this.player.vehicle
         ? `${this.player.vehicle.name} aracından in`

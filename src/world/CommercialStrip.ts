@@ -272,14 +272,14 @@ export function buildCommercialStrip(ctx: WorldContext): CommercialSpots {
 
   // Manav outdoor produce crates (tucked flush against storefront x: 84.9..86.0, leaving 2.9 m wide walkway!)
   const produceColors = ['#d93829', '#f5821f', '#4ca638', '#f2c929', '#8e44ad'];
+  const fruitGeo = new THREE.SphereGeometry(0.11, 6, 5);
   for (let i = 0; i < 5; i++) {
     const cz = -13.1 + i * 1.45;
     boxMM(ctx, 84.95, 85.95, 0, 0.78, cz, cz + 1.2, M.woodLight);
     const fruitMat = new THREE.MeshStandardMaterial({ color: produceColors[i], roughness: 0.55 });
     for (let k = 0; k < 6; k++) {
-      const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), fruitMat);
+      const fruit = new THREE.Mesh(fruitGeo, fruitMat);
       fruit.position.set(85.22 + (k % 2) * 0.36, 0.86, cz + 0.24 + Math.floor(k / 2) * 0.36);
-      fruit.castShadow = true;
       ctx.root.add(fruit);
     }
   }
@@ -344,13 +344,13 @@ export function buildCommercialStrip(ctx: WorldContext): CommercialSpots {
   // ---- NOODLE RAFI (Buyable Noodle shelf)
   const noodleShelfPos = V(94.6, 0, 5.8);
   boxMM(ctx, 93.2, 96.4, 0, 1.85, 5.2, 6.2, M.metal);
-  const noodleCupColors = ['#ef4444', '#f97316', '#facc15', '#22c55e'];
+  const noodleCupGeo = new THREE.CylinderGeometry(0.11, 0.085, 0.22, 8);
+  const noodleCupMats = ['#ef4444', '#f97316', '#facc15', '#22c55e'].map(
+    (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }),
+  );
   for (let row = 0; row < 2; row++) {
     for (let c = 0; c < 6; c++) {
-      const cup = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.11, 0.085, 0.22, 10),
-        new THREE.MeshStandardMaterial({ color: noodleCupColors[(c + row) % noodleCupColors.length], roughness: 0.4 }),
-      );
+      const cup = new THREE.Mesh(noodleCupGeo, noodleCupMats[(c + row) % noodleCupMats.length]);
       cup.position.set(93.55 + c * 0.48, 0.96 + row * 0.52, 6.08);
       ctx.root.add(cup);
     }
@@ -570,34 +570,35 @@ function parkingLotTexture(): THREE.Texture {
   return tex;
 }
 
-/** Static decorative parked car with tight AABB collider. */
+const parkedBodyGeo = new THREE.BoxGeometry(1.75, 0.56, 3.9);
+const parkedCabinGeo = new THREE.BoxGeometry(1.52, 0.56, 2.0);
+const parkedWinGeo = new THREE.BoxGeometry(1.55, 0.42, 1.75);
+const parkedWheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 10).rotateZ(Math.PI / 2);
+const parkedDarkMat = new THREE.MeshStandardMaterial({ color: '#1f2328', roughness: 0.8 });
+const parkedGlassMat = new THREE.MeshStandardMaterial({ color: '#263847', roughness: 0.1, metalness: 0.3 });
+
+/** Static decorative parked car with shared geometries and tight AABB collider. */
 function addParkedCar(ctx: WorldContext, x: number, z: number, heading: number, color: string): void {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
   g.rotation.y = heading;
 
   const paint = new THREE.MeshPhysicalMaterial({ color, roughness: 0.25, metalness: 0.35, clearcoat: 0.7 });
-  const dark = new THREE.MeshStandardMaterial({ color: '#1f2328', roughness: 0.8 });
-  const glass = new THREE.MeshStandardMaterial({ color: '#263847', roughness: 0.1, metalness: 0.3 });
-
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.56, 3.9), paint);
+  const body = new THREE.Mesh(parkedBodyGeo, paint);
   body.position.y = 0.56;
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.56, 2.0), paint);
+  body.castShadow = body.receiveShadow = true;
+  const cabin = new THREE.Mesh(parkedCabinGeo, paint);
   cabin.position.set(0, 1.12, 0.12);
-  const win = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.42, 1.75), glass);
+  cabin.castShadow = true;
+  const win = new THREE.Mesh(parkedWinGeo, parkedGlassMat);
   win.position.set(0, 1.12, 0.12);
   g.add(body, cabin, win);
 
-  const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12).rotateZ(Math.PI / 2);
   for (const [wx, wz] of [[-0.84, -1.2], [0.84, -1.2], [-0.84, 1.2], [0.84, 1.2]]) {
-    const w = new THREE.Mesh(wheelGeo, dark);
+    const w = new THREE.Mesh(parkedWheelGeo, parkedDarkMat);
     w.position.set(wx, 0.3, wz);
     g.add(w);
   }
-  g.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
-  });
   ctx.root.add(g);
 
   // Tight world AABB based on orientation

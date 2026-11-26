@@ -25,10 +25,7 @@ export interface AtakentSpots {
   vehicles: VehicleSpawn[];
 }
 
-type Span = [number, number];
-const ROADS_X: Span[] = [[-154, -146], [-62, -52], [48, 58], [144, 152]];
-const ROADS_Z: Span[] = [[-132, -124], [-52, -44], [30, 40], [113, 123]];
-const SIDEWALK = 4;
+import { ROADS_X, ROADS_Z, SIDEWALK, type Span } from './surfaces';
 
 const APT_COLORS = ['#e8dcc0', '#e9d79c', '#e7b99a', '#c3ccd0', '#ece9e2', '#d9c7a7', '#e3c4b4'];
 
@@ -163,15 +160,20 @@ export function buildAtakent(ctx: WorldContext): AtakentSpots {
   durak.rotation.y = Math.PI;
   ctx.root.add(durak);
 
-  // distant hills (Ankara steppe silhouette)
+  // distant hills (Ankara steppe silhouette — shared geometry, no shadows for FPS)
   const hillMat = new THREE.MeshStandardMaterial({ color: '#9b8a6a', roughness: 1, flatShading: true });
+  const sharedHillGeo = new THREE.ConeGeometry(1, 1, 7);
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2 + rand() * 0.2;
     const r = 520 + rand() * 120;
-    const hill = new THREE.Mesh(new THREE.ConeGeometry(110 + rand() * 90, 40 + rand() * 50, 7), hillMat);
+    const hill = new THREE.Mesh(sharedHillGeo, hillMat);
+    const radius = 110 + rand() * 90;
+    const height = 40 + rand() * 50;
     hill.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
-    hill.scale.z = 0.6;
+    hill.scale.set(radius, height, radius * 0.6);
     hill.rotation.y = rand() * 3;
+    hill.castShadow = false;
+    hill.receiveShadow = false;
     ctx.root.add(hill);
   }
 
@@ -234,6 +236,7 @@ function shadeHex(c: string): string {
 }
 
 const roofMat = new THREE.MeshStandardMaterial({ color: '#a4462e', roughness: 0.8, flatShading: true });
+const sharedRoofGeo = new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1);
 const shopMat = (() => {
   const [map, rough] = facadeTextures('shop', { wall: '#d8d2c6', wallDark: '#3a3a3a', frame: '#2b2f33', win: [0.06, 0.12, 0.94, 0.9] });
   return new THREE.MeshStandardMaterial({ map, roughnessMap: rough, roughness: 1 });
@@ -246,20 +249,24 @@ function apartment(ctx: WorldContext, x0: number, x1: number, z0: number, z1: nu
   const groundH = 3.2, fh = 3.0;
   const top = groundH + floors * fh;
   const w = x1 - x0, d = z1 - z0;
-  boxMM(ctx, x0, x1, 0, groundH, z0, z1, shopFront ? shopMat : [facade, facade, M.roof, M.roof, facade, facade], {}, worldUVBox(w, groundH, d, 3.2, shopFront ? groundH : fh));
-  boxMM(ctx, x0, x1, groundH, top, z0, z1, [facade, facade, M.roof, M.roof, facade, facade], { collide: false }, worldUVBox(w, top - groundH, d, 3.2, fh));
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  // Distant outer-ring apartments skip shadow casting to keep GPU shadow pass fast
+  const nearCore = Math.hypot(cx, cz) < 145;
+  boxMM(ctx, x0, x1, 0, groundH, z0, z1, shopFront ? shopMat : [facade, facade, M.roof, M.roof, facade, facade], { cast: nearCore, receive: nearCore }, worldUVBox(w, groundH, d, 3.2, shopFront ? groundH : fh));
+  boxMM(ctx, x0, x1, groundH, top, z0, z1, [facade, facade, M.roof, M.roof, facade, facade], { collide: false, cast: nearCore, receive: false }, worldUVBox(w, top - groundH, d, 3.2, fh));
   ctx.collision.addBox(x0, x1, groundH, top, z0, z1);
   if (rand() < 0.65) {
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4, 1), roofMat);
+    const roof = new THREE.Mesh(sharedRoofGeo, roofMat);
     roof.rotation.y = Math.PI / 4;
     roof.scale.set(w + 0.8, 2.6, d + 0.8);
-    roof.position.set((x0 + x1) / 2, top + 1.3, (z0 + z1) / 2);
-    roof.castShadow = true;
+    roof.position.set(cx, top + 1.3, cz);
+    roof.castShadow = nearCore;
+    roof.receiveShadow = false;
     ctx.root.add(roof);
   } else {
-    boxMM(ctx, x0, x1, top, top + 0.6, z0, z0 + 0.25, M.parapet, { collide: false });
-    boxMM(ctx, x0, x1, top, top + 0.6, z1 - 0.25, z1, M.parapet, { collide: false });
-    boxMM(ctx, x0 + 1, x0 + 2.4, top, top + 1.4, z0 + 1, z0 + 2.4, M.metal, { collide: false });
+    boxMM(ctx, x0, x1, top, top + 0.6, z0, z0 + 0.25, M.parapet, { collide: false, cast: false, receive: false });
+    boxMM(ctx, x0, x1, top, top + 0.6, z1 - 0.25, z1, M.parapet, { collide: false, cast: false, receive: false });
+    boxMM(ctx, x0 + 1, x0 + 2.4, top, top + 1.4, z0 + 1, z0 + 2.4, M.metal, { collide: false, cast: false, receive: false });
   }
   ctx.map.push({ x0, z0, x1, z1, color: '#d8cdb8', layer: 5 });
 }

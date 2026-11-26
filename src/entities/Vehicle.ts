@@ -4,6 +4,7 @@ import type { CollisionWorld } from '../systems/Collision';
 import { assets } from '../systems/AssetLoader';
 import { CONFIG } from '../game/config';
 import type { VehicleSpawn } from '../world/Atakent';
+import { surfaceAt, type SurfaceInfo } from '../world/surfaces';
 
 export type VehicleKind = 'car' | 'scooter' | 'escooter';
 
@@ -24,6 +25,43 @@ interface Spec {
   chaseLookHeight: number;
   modelKey: string;
 }
+
+const sharedVehicleAssets = (() => {
+  let cache: {
+    dark: THREE.MeshStandardMaterial;
+    chrome: THREE.MeshStandardMaterial;
+    tire: THREE.MeshStandardMaterial;
+    glass: THREE.MeshPhysicalMaterial;
+    headLight: THREE.MeshStandardMaterial;
+    carWheel: THREE.BufferGeometry;
+    carHub: THREE.BufferGeometry;
+    scooterWheel: THREE.BufferGeometry;
+    escooterWheel: THREE.BufferGeometry;
+  } | null = null;
+  return () => {
+    if (!cache) {
+      cache = {
+        dark: new THREE.MeshStandardMaterial({ color: '#1f2328', roughness: 0.7, metalness: 0.3 }),
+        chrome: new THREE.MeshStandardMaterial({ color: '#d8dee4', roughness: 0.2, metalness: 0.9 }),
+        tire: new THREE.MeshStandardMaterial({ color: '#18181a', roughness: 0.9 }),
+        glass: new THREE.MeshPhysicalMaterial({
+          color: '#a8cbe0',
+          roughness: 0.05,
+          metalness: 0.1,
+          transparent: true,
+          opacity: 0.18,
+          depthWrite: false,
+        }),
+        headLight: new THREE.MeshStandardMaterial({ color: '#fff8de', emissive: '#fff2c2', emissiveIntensity: 1.4 }),
+        carWheel: new THREE.CylinderGeometry(0.32, 0.32, 0.22, 14).rotateZ(Math.PI / 2),
+        carHub: new THREE.CylinderGeometry(0.16, 0.16, 0.24, 10).rotateZ(Math.PI / 2),
+        scooterWheel: new THREE.CylinderGeometry(0.24, 0.24, 0.14, 12).rotateZ(Math.PI / 2),
+        escooterWheel: new THREE.CylinderGeometry(0.13, 0.13, 0.08, 10).rotateZ(Math.PI / 2),
+      };
+    }
+    return cache;
+  };
+})();
 
 const SPECS: Record<VehicleKind, Spec> = {
   car: {
@@ -97,14 +135,32 @@ export class Vehicle {
 
   heading: number;
   headingDelta = 0;
+  /** Signed forward speed (m/s). */
   speed = 0;
   steer = 0;
   occupied = false;
 
+  /** World-space planar velocity (allows lateral slide / drift). */
+  readonly vel = new THREE.Vector3();
+  /** 0..1 lateral slip amount (tyre squeal / skid audio). */
+  slip = 0;
+  /** Impact speed (m/s) of a collision during the last update, 0 if none. */
+  impact = 0;
+  braking = false;
+  throttle = 0;
+  /** Smoothed longitudinal acceleration (m/s²) for camera pitch / body dive. */
+  longAccel = 0;
+  surface: SurfaceInfo = surfaceAt(0, 0);
+
   private spec: Spec;
   private wheels: THREE.Object3D[] = [];
+  private frontPivots: THREE.Object3D[] = [];
   private handleBar: THREE.Object3D | null = null;
   private brakeLights: THREE.MeshStandardMaterial[] = [];
+  private readonly spawnPos = new THREE.Vector3();
+  private readonly spawnHeading: number;
+  private rumblePhase = 0;
+  private sleeping = true;
 
   constructor(spawn: VehicleSpawn, scene: THREE.Scene) {
     this.kind = spawn.kind;
@@ -114,6 +170,8 @@ export class Vehicle {
     this.halfLength = this.spec.halfLength;
     this.pos.copy(spawn.pos);
     this.heading = spawn.heading;
+    this.spawnPos.copy(spawn.pos);
+    this.spawnHeading = spawn.heading;
 
     this.root.add(this.body);
     this.buildProcedural(spawn.color);
@@ -151,91 +209,208 @@ export class Vehicle {
     return Math.round(Math.abs(this.speed) * 3.6);
   }
 
+  get maxSpeed(): number {
+    return this.spec.maxSpeed;
+  }
+
   update(dt: number, input: Input | null, collision: CollisionWorld, speedMultiplier = 1): void {
     const s = this.spec;
     const mult = Math.max(0.5, speedMultiplier);
+    this.impact = 0;
+    this.headingDelta = 0;
+
     let throttle = 0;
     let steerInput = 0;
-    let braking = false;
-
+    let handbrake = false;
     if (this.occupied && input) {
       throttle = input.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']);
       steerInput = input.axis(['KeyD', 'ArrowRight'], ['KeyA', 'ArrowLeft']);
-      braking = input.isDown('Space') || (throttle < 0 && this.speed > 0.5);
+      handbrake = input.isDown('Space');
     }
+    this.throttle = throttle;
 
-    if (braking && this.occupied) {
-      const decel = s.brake * mult * dt;
-      if (Math.abs(this.speed) <= decel) this.speed = 0;
-      else this.speed -= Math.sign(this.speed) * decel;
-    } else if (throttle > 0) {
-      this.speed = Math.min(s.maxSpeed * mult, this.speed + s.accel * mult * dt);
-    } else if (throttle < 0) {
-      this.speed = Math.max(-s.reverseSpeed * mult, this.speed - s.accel * mult * 0.8 * dt);
-    } else {
-      const drag = s.drag * dt;
-      if (Math.abs(this.speed) <= drag) this.speed = 0;
-      else this.speed -= Math.sign(this.speed) * drag;
-    }
-
-    const kSteer = 1 - Math.exp(-dt * 11);
-    this.steer += (steerInput - this.steer) * kSteer;
-
-    const prevHeading = this.heading;
-    if (Math.abs(this.speed) > 0.08) {
-      const speedFactor = Math.min(1, Math.abs(this.speed) / 4.5);
-      const dir = this.speed >= 0 ? 1 : -1;
-      this.heading += this.steer * s.turnRate * speedFactor * dir * dt;
-    }
-    this.headingDelta = this.heading - prevHeading;
-
-    // Move along -Z forward vector
-    const fx = -Math.sin(this.heading);
-    const fz = -Math.cos(this.heading);
-    const prevX = this.pos.x;
-    const prevZ = this.pos.z;
-    this.pos.x += fx * this.speed * dt;
-    this.pos.z += fz * this.speed * dt;
-
-    // World bounds
-    const bound = CONFIG.world.half - 2.5;
-    this.pos.x = THREE.MathUtils.clamp(this.pos.x, -bound, bound);
-    this.pos.z = THREE.MathUtils.clamp(this.pos.z, -bound, bound);
-
-    // Collision check using circular approximation (front + rear points for cars)
-    const radius = this.kind === 'car' ? 0.98 : 0.44;
-    const hit = collision.resolveCircle(this.pos, radius, 1.5, 0.22);
-    if (hit) {
-      const moved = Math.hypot(this.pos.x - prevX, this.pos.z - prevZ);
-      if (moved < Math.abs(this.speed) * dt * 0.5) {
-        this.speed *= -0.22;
-      } else {
-        this.speed *= 0.72;
+    // Parked & at rest: skip physics entirely (cheap for all idle vehicles in the world)
+    if (!this.occupied && this.vel.lengthSq() < 0.0004) {
+      if (!this.sleeping) {
+        this.vel.set(0, 0, 0);
+        this.speed = 0;
+        this.slip = 0;
+        this.braking = false;
+        this.longAccel = 0;
+        this.steer = 0;
+        this.body.rotation.set(0, 0, 0);
+        this.body.position.y = 0;
+        if (this.frontPivots.length) for (const p of this.frontPivots) p.rotation.y = 0;
+        if (this.handleBar) this.handleBar.rotation.y = 0;
+        for (const bl of this.brakeLights) bl.emissiveIntensity = 0.15;
+        this.sleeping = true;
       }
+      return;
+    }
+    this.sleeping = false;
+
+    const surf = surfaceAt(this.pos.x, this.pos.z);
+    this.surface = surf;
+
+    // --- decompose velocity into forward / lateral components
+    let fx = -Math.sin(this.heading), fz = -Math.cos(this.heading);
+    let rx = Math.cos(this.heading), rz = -Math.sin(this.heading);
+    let vf = this.vel.x * fx + this.vel.z * fz;
+    let vl = this.vel.x * rx + this.vel.z * rz;
+    const prevVf = vf;
+
+    const top = s.maxSpeed * mult * surf.speed;
+    const braking =
+      this.occupied && (handbrake || (throttle < 0 && vf > 0.6) || (throttle > 0 && vf < -0.6));
+    this.braking = braking;
+
+    if (braking) {
+      const decel = s.brake * mult * (handbrake ? 0.8 : 1) * (0.55 + 0.45 * surf.grip) * dt;
+      vf = Math.abs(vf) <= decel ? 0 : vf - Math.sign(vf) * decel;
+    } else if (throttle > 0) {
+      // Gradual acceleration curve: strong pull at low speed, tapering near top speed
+      const ratio = THREE.MathUtils.clamp(vf / top, 0, 1);
+      const curve = 1 - ratio * ratio * 0.82;
+      vf = Math.min(Math.max(vf, top), vf + s.accel * mult * curve * (0.7 + 0.3 * surf.grip) * dt);
+    } else if (throttle < 0) {
+      vf = Math.max(-s.reverseSpeed * mult, vf - s.accel * 0.7 * mult * dt);
     }
 
-    this.pos.y = collision.groundHeight(this.pos.x, this.pos.z, radius, this.pos.y, 0.35);
+    // Rolling resistance (stronger on grass / dirt) and gentle bleed-off above surface top speed
+    const roll = s.drag * surf.drag * (throttle === 0 ? 1 : 0.25) * dt;
+    vf = Math.abs(vf) <= roll ? 0 : vf - Math.sign(vf) * roll;
+    if (vf > top) vf -= (vf - top) * (1 - Math.exp(-dt * 2.2));
+
+    // --- steering: less lock at high speed for stability
+    const speedAbs = Math.abs(vf);
+    const lockScale = 1 - Math.min(0.55, speedAbs / (s.maxSpeed * 1.6));
+    this.steer += (steerInput * lockScale - this.steer) * (1 - Math.exp(-dt * 9));
+
+    // Recompose with old axes, then rotate the chassis: forward momentum becomes lateral slip
+    this.vel.x = fx * vf + rx * vl;
+    this.vel.z = fz * vf + rz * vl;
+    if (speedAbs > 0.08) {
+      const sf = Math.min(1, speedAbs / 4.5);
+      const yaw = this.steer * s.turnRate * sf * Math.sign(vf) * dt;
+      this.heading += yaw;
+      this.headingDelta = yaw;
+    }
+    fx = -Math.sin(this.heading); fz = -Math.cos(this.heading);
+    rx = Math.cos(this.heading); rz = -Math.sin(this.heading);
+    vf = this.vel.x * fx + this.vel.z * fz;
+    vl = this.vel.x * rx + this.vel.z * rz;
+
+    // Lateral tyre grip: weaker with handbrake, sharp turns at speed, and loose surfaces => slide
+    const baseGrip = this.kind === 'car' ? 7.2 : 9.5;
+    const sharp = Math.abs(this.steer) * Math.min(1, speedAbs / (s.maxSpeed * 0.7));
+    const grip = baseGrip * surf.grip * (handbrake ? 0.28 : 1) * (1 - 0.45 * sharp);
+    vl *= Math.exp(-grip * dt);
+    this.vel.x = fx * vf + rx * vl;
+    this.vel.z = fz * vf + rz * vl;
+    this.slip = THREE.MathUtils.clamp(Math.abs(vl) / 5, 0, 1);
+
+    // --- integrate with sub-steps (no tunnelling through thin walls at high speed)
+    const travel = Math.hypot(this.vel.x, this.vel.z) * dt;
+    const steps = Math.min(6, Math.max(1, Math.ceil(travel / 0.3)));
+    const sdt = dt / steps;
+    const bound = CONFIG.world.half - 2.5;
+    for (let i = 0; i < steps; i++) {
+      this.pos.x += this.vel.x * sdt;
+      this.pos.z += this.vel.z * sdt;
+      if (Math.abs(this.pos.x) > bound) { this.pos.x = Math.sign(this.pos.x) * bound; this.vel.x *= -0.2; }
+      if (Math.abs(this.pos.z) > bound) { this.pos.z = Math.sign(this.pos.z) * bound; this.vel.z *= -0.2; }
+      this.resolveCollisions(collision, fx, fz);
+    }
+
+    // Safety net: never leave the playable world
+    if (!Number.isFinite(this.pos.x) || !Number.isFinite(this.pos.z) || !Number.isFinite(this.vel.x)) {
+      this.pos.copy(this.spawnPos);
+      this.heading = this.spawnHeading;
+      this.vel.set(0, 0, 0);
+    }
+
+    const radius = this.kind === 'car' ? 0.9 : 0.4;
+    const gy = collision.groundHeight(this.pos.x, this.pos.z, radius, this.pos.y, 0.3);
+    this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 18);
+    if (Math.abs(gy - this.pos.y) < 0.005) this.pos.y = gy;
+
+    this.speed = this.vel.x * fx + this.vel.z * fz;
+    const rawAccel = (this.speed - prevVf) / Math.max(dt, 1e-3);
+    this.longAccel += (THREE.MathUtils.clamp(rawAccel, -40, 40) - this.longAccel) * (1 - Math.exp(-dt * 8));
 
     this.root.position.copy(this.pos);
     this.root.rotation.y = this.heading;
 
-    // Subtle body lean (scooters lean into turns, cars roll slightly outward)
-    const leanTarget =
-      this.kind === 'car'
-        ? this.steer * Math.min(1, Math.abs(this.speed) / 14) * 0.04
-        : -this.steer * Math.min(1, Math.abs(this.speed) / 9) * 0.22;
-    this.body.rotation.z += (leanTarget - this.body.rotation.z) * (1 - Math.exp(-dt * 10));
+    // --- chassis animation: roll, dive/squat, surface rumble
+    const sp = Math.abs(this.speed);
+    const latRatio = THREE.MathUtils.clamp(vl / 6, -1, 1);
+    const kBody = 1 - Math.exp(-dt * 10);
+    if (this.kind === 'car') {
+      const rollTarget = this.steer * Math.min(1, sp / 14) * 0.045 + latRatio * 0.03;
+      this.body.rotation.z += (rollTarget - this.body.rotation.z) * kBody;
+    } else {
+      const leanTarget = -this.steer * Math.min(1, sp / 9) * 0.26 - latRatio * 0.08;
+      this.body.rotation.z += (leanTarget - this.body.rotation.z) * kBody;
+    }
+    const pitchTarget = THREE.MathUtils.clamp(this.longAccel * 0.0035, -0.055, 0.04);
+    this.body.rotation.x += (pitchTarget - this.body.rotation.x) * kBody;
+    this.rumblePhase += dt * (6 + sp * 2.2);
+    this.body.position.y = Math.sin(this.rumblePhase) * surf.rough * 0.018 * Math.min(1, sp / 5);
 
-    // Wheel spin & handlebar turn
-    const spin = -this.speed * dt * (this.kind === 'escooter' ? 6 : 3.2);
+    // Wheel spin, visible front-wheel / handlebar steering angle
+    const wheelR = this.kind === 'car' ? 0.32 : this.kind === 'scooter' ? 0.24 : 0.13;
+    const spin = (-this.speed * dt) / wheelR;
     for (const w of this.wheels) w.rotation.x += spin;
-    if (this.handleBar) this.handleBar.rotation.y = this.steer * 0.45;
+    const steerAngle = this.steer * (this.kind === 'car' ? 0.5 : 0.45);
+    for (const p of this.frontPivots) p.rotation.y = steerAngle;
+    if (this.handleBar) this.handleBar.rotation.y = this.kind === 'car' ? 0 : steerAngle;
+    if (this.kind === 'car' && this.handleBar) this.handleBar.rotation.z = -this.steer * 1.6;
     for (const bl of this.brakeLights) {
       bl.emissiveIntensity = braking ? 2.4 : this.occupied ? 0.8 : 0.15;
     }
   }
 
+  /** Multi-circle chassis collision with velocity reflection (no snagging, no launching). */
+  private resolveCollisions(collision: CollisionWorld, fx: number, fz: number): void {
+    const probes = this.kind === 'car' ? [-1.12, 1.12] : this.kind === 'scooter' ? [-0.45, 0.45] : [0];
+    const r = this.kind === 'car' ? 0.92 : this.kind === 'scooter' ? 0.36 : 0.34;
+    let nx = 0, nz = 0;
+    for (const off of probes) {
+      const p = Vehicle.tmp.set(this.pos.x + fx * off, this.pos.y, this.pos.z + fz * off);
+      const bx = p.x, bz = p.z;
+      if (collision.resolveCircle(p, r, 1.5, 0.3)) {
+        const dx = p.x - bx, dz = p.z - bz;
+        // Cap per-probe correction so a deep overlap never "launches" the vehicle
+        const len = Math.hypot(dx, dz);
+        const cap = len > 0.6 ? 0.6 / len : 1;
+        this.pos.x += dx * cap;
+        this.pos.z += dz * cap;
+        nx += dx;
+        nz += dz;
+      }
+    }
+    const nl = Math.hypot(nx, nz);
+    if (nl < 1e-6) return;
+    nx /= nl; nz /= nl;
+    const vn = this.vel.x * nx + this.vel.z * nz;
+    if (vn < 0) {
+      // Remove inbound component with small bounce, scrub tangential speed a bit
+      const restitution = 0.22;
+      this.vel.x -= (1 + restitution) * vn * nx;
+      this.vel.z -= (1 + restitution) * vn * nz;
+      const tx = this.vel.x - (this.vel.x * nx + this.vel.z * nz) * nx;
+      const tz = this.vel.z - (this.vel.x * nx + this.vel.z * nz) * nz;
+      const scrub = 0.12 + Math.min(0.5, -vn * 0.04);
+      this.vel.x -= tx * scrub;
+      this.vel.z -= tz * scrub;
+      this.impact = Math.max(this.impact, -vn);
+    }
+  }
+
+  private static tmp = new THREE.Vector3();
+
   private buildProcedural(hexColor: string): void {
+    const shared = sharedVehicleAssets();
     const paint = new THREE.MeshPhysicalMaterial({
       color: hexColor,
       roughness: 0.22,
@@ -243,18 +418,7 @@ export class Vehicle {
       clearcoat: 0.85,
       clearcoatRoughness: 0.15,
     });
-    const dark = new THREE.MeshStandardMaterial({ color: '#1f2328', roughness: 0.7, metalness: 0.3 });
-    const chrome = new THREE.MeshStandardMaterial({ color: '#d8dee4', roughness: 0.2, metalness: 0.9 });
-    const tire = new THREE.MeshStandardMaterial({ color: '#18181a', roughness: 0.9 });
-    const glass = new THREE.MeshPhysicalMaterial({
-      color: '#a8cbe0',
-      roughness: 0.05,
-      metalness: 0.1,
-      transparent: true,
-      opacity: 0.18,
-      depthWrite: false,
-    });
-    const headLight = new THREE.MeshStandardMaterial({ color: '#fff8de', emissive: '#fff2c2', emissiveIntensity: 1.4 });
+    const { dark, chrome, tire, glass, headLight } = shared;
     const tailLight = new THREE.MeshStandardMaterial({ color: '#c8102e', emissive: '#ff1f3d', emissiveIntensity: 0.25 });
     this.brakeLights.push(tailLight);
 
@@ -310,15 +474,24 @@ export class Vehicle {
         this.body.add(hl, tl);
       }
 
-      // Wheels
-      const wGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 16).rotateZ(Math.PI / 2);
-      const hubGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.24, 12).rotateZ(Math.PI / 2);
+      // Wheels (shared geometries across all cars)
+      const wGeo = shared.carWheel;
+      const hubGeo = shared.carHub;
       for (const [wx, wz] of [[-0.86, -1.28], [0.86, -1.28], [-0.86, 1.28], [0.86, 1.28]]) {
         const wg = new THREE.Group();
-        wg.position.set(wx, 0.32, wz);
         wg.add(new THREE.Mesh(wGeo, tire), new THREE.Mesh(hubGeo, chrome));
         this.wheels.push(wg);
-        this.body.add(wg);
+        if (wz < 0) {
+          // Front wheels sit in a steering pivot so the steer angle is clearly visible
+          const pivot = new THREE.Group();
+          pivot.position.set(wx, 0.32, wz);
+          pivot.add(wg);
+          this.frontPivots.push(pivot);
+          this.body.add(pivot);
+        } else {
+          wg.position.set(wx, 0.32, wz);
+          this.body.add(wg);
+        }
       }
 
       this.body.add(lower, bumperF, bumperR, roof, hood, dash, steering, wind, rearWind, grille);
@@ -347,12 +520,9 @@ export class Vehicle {
       const tl = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.06), tailLight);
       tl.position.set(0, 0.66, 0.76);
 
-      const wGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.14, 14).rotateZ(Math.PI / 2);
+      const wGeo = shared.scooterWheel;
       for (const wz of [-0.66, 0.64]) {
-        const w = new THREE.Mesh(wGeo, tire);
-        w.position.set(0, 0.24, wz);
-        this.wheels.push(w);
-        this.body.add(w);
+        this.addTwoWheel(wGeo, tire, 0.24, wz);
       }
 
       this.body.add(deck, rearBody, seat, frontShield, barGroup, tl);
@@ -378,12 +548,9 @@ export class Vehicle {
       const tl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.04), tailLight);
       tl.position.set(0, 0.2, 0.55);
 
-      const wGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.08, 12).rotateZ(Math.PI / 2);
+      const wGeo = shared.escooterWheel;
       for (const wz of [-0.48, 0.48]) {
-        const w = new THREE.Mesh(wGeo, tire);
-        w.position.set(0, 0.13, wz);
-        this.wheels.push(w);
-        this.body.add(w);
+        this.addTwoWheel(wGeo, tire, 0.13, wz);
       }
       this.body.add(deck, trim, barGroup, tl);
     }
@@ -391,9 +558,28 @@ export class Vehicle {
     this.body.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
+        // Tiny parts (lights, bars, hubs) don't need to cast shadows
+        m.geometry.computeBoundingSphere();
+        const r = m.geometry.boundingSphere?.radius ?? 1;
+        m.castShadow = r > 0.15;
+        m.receiveShadow = r > 0.3;
       }
     });
+  }
+
+  /** Two-wheeler wheel: the front one goes into a steering pivot. */
+  private addTwoWheel(geo: THREE.BufferGeometry, mat: THREE.Material, radius: number, wz: number): void {
+    const w = new THREE.Mesh(geo, mat);
+    this.wheels.push(w);
+    if (wz < 0) {
+      const pivot = new THREE.Group();
+      pivot.position.set(0, radius, wz);
+      pivot.add(w);
+      this.frontPivots.push(pivot);
+      this.body.add(pivot);
+    } else {
+      w.position.set(0, radius, wz);
+      this.body.add(w);
+    }
   }
 }
