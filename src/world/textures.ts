@@ -312,7 +312,7 @@ export function blackboardTexture(): THREE.Texture {
     ctx.fillText('6-G  •  MATEMATİK', 36, 78);
     ctx.font = '34px Segoe UI, Arial';
     ctx.fillStyle = '#fde68a';
-    ctx.fillText('Öğrt. Mihri Can', 680, 74);
+    ctx.fillText('Öğrt. Mihrican', 690, 74);
     ctx.fillStyle = 'rgba(240,240,230,0.92)';
     ctx.font = '38px Segoe UI, Arial';
     ctx.fillText('1) Kesirler: 3/4 + 1/8 = 7/8', 36, 154);

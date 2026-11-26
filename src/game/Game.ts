@@ -64,6 +64,7 @@ export class Game {
   private schoolBellTimer = 24;
   private schoolBellHeardOnce = false;
   private mathLessonIdx = 0;
+  private kantinOrderIdx = 0;
 
   constructor(canvasHost: HTMLElement, hudHost: HTMLElement) {
     // Renderer
@@ -203,7 +204,7 @@ export class Game {
       new FriendlyNPC(
         {
           id: 'mihrican',
-          name: 'Mihri Can',
+          name: 'Mihrican',
           role: 'Matematik Öğretmeni • 6-G',
           color: '#38bdf8',
           modelKey: 'mihrican',
@@ -529,7 +530,7 @@ export class Game {
           }
         }
 
-        // Mission / shop / Zümra & Nisa / Mihri Can math class interaction
+        // Mission / shop / Zümra & Nisa / Mihrican math class / Indoor Kantin interaction
         if (this.input.wasPressed('KeyE')) {
           const handled = this.missions.tryInteract(this.player.pos, !!this.player.vehicle);
           if (handled) {
@@ -553,13 +554,43 @@ export class Game {
             ) {
               const mathLines = [
                 'Çocuklar kesirlerde payda eşitlemeyi unutmayın: 3/4 + 1/8 = 7/8!',
-                'Sefa, Betül tahtadaki 2x + 6 = 14 denklemini kim çözmek ister? x = 4!',
+                'Yan yana oturan Sefa ve Betül, tahtadaki 2x + 6 = 14 denklemini birlikte çözün bakalım: x = 4!',
                 '6-G harikasınız! Matematik ödevi sayfa 112, 1–10 arası sorular.',
               ];
               const msg = mathLines[this.mathLessonIdx % mathLines.length];
               this.mathLessonIdx += 1;
               this.audio.interact();
-              this.hud.showToast('Mihri Can (Matematik Dersi)', msg, 'green', 4.4);
+              this.hud.showToast('Mihrican (Matematik Dersi)', msg, 'green', 4.4);
+            } else if (
+              !this.player.vehicle &&
+              Math.hypot(
+                this.player.pos.x - this.schoolSpots.indoorKantin.x,
+                this.player.pos.z - this.schoolSpots.indoorKantin.z,
+              ) <= 3.2
+            ) {
+              const menu = [
+                { name: 'Kaşarlı Tost & Ayran', price: 25 },
+                { name: 'Sıcak Simit & Meyve Suyu', price: 18 },
+                { name: 'Çikolata & Su', price: 12 },
+              ];
+              const pick = menu[this.kantinOrderIdx % menu.length];
+              if (this.shops.money < pick.price) {
+                this.audio.interact();
+                this.hud.showToast('Okul Kantini', `${pick.name} için ₺${pick.price} gerekiyor.`, 'red');
+              } else {
+                this.shops.money -= pick.price;
+                this.kantinOrderIdx += 1;
+                this.player.stamina = CONFIG.player.staminaMax;
+                this.missions.score += 45;
+                this.audio.pickup();
+                this.persistProgress();
+                this.hud.showToast(
+                  `Okul Kantini: ${pick.name} Alındı`,
+                  `Enerjin %100 yenilendi (+45 Puan · Kalan: ₺${this.shops.money})`,
+                  'green',
+                  3.8,
+                );
+              }
             }
           }
         }
@@ -721,7 +752,16 @@ export class Game {
               this.player.pos.x - this.schoolSpots.teacherSpot.x,
               this.player.pos.z - this.schoolSpots.teacherSpot.z,
             ) <= 3.2
-          ? 'Mihri Can’ın Matematik Dersini Dinle'
+          ? 'Mihrican’ın Matematik Dersini Dinle'
+          : null;
+    const kantinPrompt =
+      missionPrompt || shopPrompt || duoPrompt || teacherPrompt || this.player.vehicle
+        ? null
+        : Math.hypot(
+              this.player.pos.x - this.schoolSpots.indoorKantin.x,
+              this.player.pos.z - this.schoolSpots.indoorKantin.z,
+            ) <= 3.2
+          ? 'Okul Kantini’nden Tost / Atıştırmalık Al'
           : null;
     const shopState = this.shops.hudState();
     this.hud.update(dt, {
@@ -735,7 +775,7 @@ export class Game {
       heat: this.heat.snapshot(),
       mission: this.missions.hudState(),
       shop: shopState,
-      interactPrompt: missionPrompt ?? shopPrompt ?? duoPrompt ?? teacherPrompt,
+      interactPrompt: missionPrompt ?? shopPrompt ?? duoPrompt ?? teacherPrompt ?? kantinPrompt,
       consumePrompt: shopState.noodleState === 'hot' ? 'Sıcak Noodle İç (+Enerji)' : null,
       vehiclePrompt: this.player.vehicle
         ? `${this.player.vehicle.name} aracından in`

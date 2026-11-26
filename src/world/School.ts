@@ -15,6 +15,7 @@ export interface SchoolSpots {
   betulSeat: THREE.Vector3;
   teacherSpot: THREE.Vector3;
   kantin: THREE.Vector3;
+  indoorKantin: THREE.Vector3;
   detention: THREE.Vector3;
   pages: THREE.Vector3[];
   patrolPrincipal: THREE.Vector3[];
@@ -78,7 +79,22 @@ export function buildSchool(ctx: WorldContext): SchoolSpots {
   wall(A.x0, A.x1, A.z0, A.z0 + W, 5);
   wall(A.x0, A.x0 + W, A.z0, -20.5, 1);
   wall(A.x0, A.x0 + W, -17.5, A.z1, 1);
-  wall(A.x1 - W, A.x1, A.z0, A.z1, -1);
+  // East end of corridor: open 3.2 m archway into the indoor Kantin (z: -20.2..-17.0)
+  wall(A.x1 - W, A.x1, A.z0, -20.2, -1);
+  wall(A.x1 - W, A.x1, -17.0, A.z1, -1);
+  boxMM(ctx, A.x1 - W, A.x1, 3.05, GF_TOP, -20.2, -17.0, int, { collide: false });
+  boxMM(ctx, A.x1 - W - 0.04, A.x1 + 0.04, FLOOR, 3.05, -20.28, -20.2, M.wood, { collide: false });
+  boxMM(ctx, A.x1 - W - 0.04, A.x1 + 0.04, FLOOR, 3.05, -17.0, -16.92, M.wood, { collide: false });
+  boxMM(ctx, A.x1 - W - 0.04, A.x1 + 0.04, 2.98, 3.08, -20.28, -16.92, M.wood, { collide: false });
+  const corridorKantinSign = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.6, 0.48),
+    new THREE.MeshStandardMaterial({
+      map: signTexture(['OKUL KANTİNİ →'], { w: 560, h: 104, bg: '#f2c230', fg: '#1e293b', border: '#1e293b' }),
+    }),
+  );
+  corridorKantinSign.position.set(A.x1 - W - 0.03, 3.45, -18.6);
+  corridorKantinSign.rotation.y = -Math.PI / 2;
+  ctx.root.add(corridorKantinSign);
   // west side door steps
   boxMM(ctx, A.x0 - 1.2, A.x0, 0, 0.4, -20.5, -17.5, M.concrete);
   boxMM(ctx, A.x0 - 2.4, A.x0 - 1.2, 0, 0.2, -20.5, -17.5, M.concrete);
@@ -187,6 +203,14 @@ export function buildSchool(ctx: WorldContext): SchoolSpots {
     im.castShadow = im.receiveShadow = true;
     ctx.root.add(im);
   }
+  // Extra chair right beside Sefa's seat so Sefa & Betül sit side-by-side at the same 6-G double desk
+  const sharedDeskX = g6.x0 + 4 + 0.8 - 0.4; // 0.4
+  const betulChairX = sharedDeskX + 0.3; // 0.7 (Sefa is at 0.15)
+  const sharedChairZ = -24.6 + 0.6; // -24.0
+  boxMM(ctx, betulChairX - 0.21, betulChairX + 0.21, FLOOR + 0.42, FLOOR + 0.46, sharedChairZ - 0.2, sharedChairZ + 0.2, M.chairBlue, { collide: false });
+  boxMM(ctx, betulChairX - 0.21, betulChairX + 0.21, FLOOR + 0.46, FLOOR + 0.88, sharedChairZ + 0.18, sharedChairZ + 0.22, M.chairBlue, { collide: false });
+  boxMM(ctx, betulChairX - 0.18, betulChairX + 0.18, FLOOR, FLOOR + 0.42, sharedChairZ - 0.18, sharedChairZ + 0.18, M.metalDark, { collide: false });
+
   // blackboard + teacher desk + Atatürk portrait
   const bb = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.5), new THREE.MeshStandardMaterial({ map: blackboardTexture(), roughness: 0.9 }));
   bb.position.set(g6.x0 + 6, 2.1, A.z0 + W + 0.02);
@@ -215,9 +239,61 @@ export function buildSchool(ctx: WorldContext): SchoolSpots {
     boxMM(ctx, x0, x1, y0, y1, z0, z1, mats, { collide: false }, worldUVBox(x1 - x0, y1 - y0, z1 - z0, BAY, FLOOR_H));
   };
   shell(A.x0, A.x1, A.z0, A.z1, GF_TOP, ROOF, M.terracotta, M.ceiling);
-  // Wing B: solid brick base + terracotta floors
-  boxMM(ctx, B.x0, B.x1, 0, GF_TOP, B.z0, B.z1, ext, {}, worldUVBox(B.x1 - B.x0, GF_TOP, B.z1 - B.z0, BAY, GF_TOP));
-  shell(B.x0, B.x1, B.z0, B.z1, GF_TOP, ROOF, M.terracotta, M.stone);
+  // Wing B: north solid block + WALKABLE INDOOR KANTİN (z: -22..-10) + south solid block
+  boxMM(ctx, B.x0, B.x1, 0, GF_TOP, B.z0, -22, ext, {}, worldUVBox(B.x1 - B.x0, GF_TOP, 8, BAY, GF_TOP));
+  boxMM(ctx, B.x0, B.x1, 0, GF_TOP, -10, B.z1, ext, {}, worldUVBox(B.x1 - B.x0, GF_TOP, B.z1 + 10, BAY, GF_TOP));
+
+  // ---- Walkable Indoor School Kantin (x: 20..34, z: -22..-10), accessible directly from corridor!
+  boxMM(ctx, B.x0, B.x1, 0, FLOOR, -22, -10, M.stone); // plinth / floor slab
+  groundPlane(ctx, B.x0, B.x1 - W, -22 + W, -10 - W, FLOOR + 0.002, M.floorTile, 1.2);
+  // Perimeter walls around indoor Kantin (leaving west corridor doorway z: -20.2..-17.0 completely open!)
+  wall(B.x1 - W, B.x1, -22, -10, 0); // east exterior wall
+  wall(B.x0, B.x1, -22, -22 + W, -1); // north divider wall
+  wall(B.x0, B.x1, -10 - W, -10, -1); // south divider wall
+  wall(B.x0, B.x0 + W, -16.0, -10, 1); // west yard-facing exterior wall south of corridor
+  // Bright interior lights
+  for (const [kx, kz] of [[24, -18.5], [24, -13.5], [30, -18.5], [30, -13.5]]) panel(kx, kz);
+  const kantinLight = new THREE.PointLight(0xfff4df, 14, 20, 1.3);
+  kantinLight.position.set(27, 3.6, -16);
+  ctx.root.add(kantinLight);
+  // Serving counter (x: 28.6..29.9, z: -20.8..-11.2)
+  boxMM(ctx, 28.6, 29.9, FLOOR, FLOOR + 0.98, -20.8, -11.2, M.woodLight);
+  boxMM(ctx, 28.5, 29.95, FLOOR + 0.96, FLOOR + 1.04, -20.85, -11.15, M.white, { collide: false });
+  // Tost makinesi (toast press) + heating LED on counter
+  boxMM(ctx, 28.9, 29.55, FLOOR + 1.04, FLOOR + 1.24, -17.4, -16.6, M.metalDark, { collide: false });
+  const tostLed = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.04, 0.06),
+    new THREE.MeshStandardMaterial({ color: '#ff3b30', emissive: '#ff3b30', emissiveIntensity: 1.8 }),
+  );
+  tostLed.position.set(28.88, FLOOR + 1.15, -16.8);
+  ctx.root.add(tostLed);
+  // Snack / tost / simit display boxes along counter
+  const snackColors = ['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#eab308'];
+  snackColors.forEach((col, i) => {
+    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5 });
+    boxMM(ctx, 28.95, 29.45, FLOOR + 1.04, FLOOR + 1.24, -15.6 + i * 0.85, -15.0 + i * 0.85, mat, { collide: false, cast: false });
+  });
+  // Beverage refrigerator on back east wall (ayran & fruit juice)
+  boxMM(ctx, 32.1, 33.4, FLOOR, FLOOR + 2.2, -20.6, -14.2, M.white);
+  boxMM(ctx, 32.02, 32.1, FLOOR + 0.35, FLOOR + 2.05, -20.2, -14.6, M.glass, { collide: false, cast: false });
+  // Menu board behind the counter
+  const kantinMenu = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.4, 1.2),
+    new THREE.MeshStandardMaterial({
+      map: signTexture(['OKUL KANTİNİ', 'Kaşarlı Tost ₺25 • Ayran ₺10 • Simit ₺15 • Çikolata ₺12'], {
+        w: 960, h: 240, bg: '#1e293b', fg: '#ffd166', border: '#f59e0b',
+      }),
+    }),
+  );
+  kantinMenu.position.set(B.x1 - W - 0.03, 2.55, -12.6);
+  kantinMenu.rotation.y = -Math.PI / 2;
+  ctx.root.add(kantinMenu);
+  // Two small indoor kantin tables near south side (clear of entrance walkway!)
+  for (const tx of [23.2, 26.0]) {
+    boxMM(ctx, tx - 0.55, tx + 0.55, FLOOR, FLOOR + 0.76, -12.8, -11.7, M.deskTop);
+  }
+
+  shell(B.x0, B.x1, B.z0, B.z1, GF_TOP, ROOF, M.terracotta, M.ceiling);
   // floor slab lines (thin horizontal cornices give depth to the facade)
   for (let f = 0; f <= UPPER_FLOORS; f++) {
     const y = GF_TOP + f * FLOOR_H;
@@ -450,6 +526,7 @@ export function buildSchool(ctx: WorldContext): SchoolSpots {
     { id: 'office', label: 'Müdür Odası', minX: -16, maxX: -4, minZ: A.z0, maxZ: CZ, restricted: true, school: true },
     { id: 'teachers', label: 'Öğretmenler Odası', minX: 8, maxX: 20, minZ: A.z0, maxZ: CZ, restricted: true, school: true },
     { id: '6g', label: '6-G Sınıfı', minX: -4, maxX: 8, minZ: A.z0, maxZ: CZ, school: true },
+    { id: 'kantin_ic', label: 'Okul Kantini', minX: B.x0, maxX: B.x1, minZ: -22, maxZ: -10, school: true },
     { id: 'corridor', label: 'Koridor', minX: A.x0, maxX: A.x1, minZ: A.z0, maxZ: A.z1, school: true },
     { id: 'school', label: 'Okul Bahçesi', minX: LOT.x0, maxX: LOT.x1, minZ: LOT.z0, maxZ: LOT.z1, school: true },
   );
@@ -459,10 +536,11 @@ export function buildSchool(ctx: WorldContext): SchoolSpots {
     entrance: V(-10, FLOOR, -15),
     lobby: V(-10, FLOOR, -18.6),
     desk6G: V(g6.x0 + 4 + 3.6 - 0.4 - 0.25, FLOOR, -24.6 + 0.6),
-    sefaSeat: V(g6.x0 + 4 + 0.8 - 0.4 - 0.25, FLOOR, -24.6 + 0.6),
-    betulSeat: V(g6.x0 + 4 + 3.6 - 0.4 - 0.25, FLOOR, -26.2 + 0.6),
+    sefaSeat: V(sharedDeskX - 0.26, FLOOR, sharedChairZ),
+    betulSeat: V(betulChairX, FLOOR, sharedChairZ),
     teacherSpot: V(g6.x0 + 4.3, FLOOR, -28.0),
     kantin: V(B.x0 - 0.9, 0, -6),
+    indoorKantin: V(28.0, FLOOR, -16.0),
     detention: V(-10, FLOOR, -18.8),
     pages: [V(-22, 0, -35.5), V(39.5, 0, -18), V(-40.5, 0, 21.5)],
     patrolPrincipal: [V(-10, 0, -8.2), V(-26, 0, -7.0), V(-22, 0, 12), V(-8, 0, 21), V(10, 0, 19), V(14, 0, -6)],

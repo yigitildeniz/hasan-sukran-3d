@@ -15,7 +15,7 @@ export interface FriendlySpec {
   sit?: boolean;
 }
 
-/** Friendly schoolmates, teacher and neighbourhood characters (Sefa, Betül, Mihri Can, Mert, Simitçi Amca). */
+/** Friendly schoolmates, teacher and neighbourhood characters (Sefa, Betül, Mihrican, Mert, Simitçi Amca). */
 export class FriendlyNPC {
   readonly id: string;
   readonly name: string;

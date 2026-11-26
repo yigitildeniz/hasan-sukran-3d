@@ -29,7 +29,7 @@ interface PageItem {
 
 /**
  * 3-mission starter campaign for Atakent: Okul Hikâyesi:
- * 1. "Sabah Yoklaması: 6-G" — Enter school, attend Mihri Can's math class & check in with Sefa & Betül.
+ * 1. "Sabah Yoklaması: 6-G" — Enter school, attend Mihrican's math class & check in with Sefa & Betül.
  * 2. "Kayıp Sınav Kâğıtları" — Recover 3 blown-away study pages in the school grounds & return to 6-G.
  * 3. "Atakent Simit Operasyonu" — Ride a vehicle to Simitçi Amca, deliver warm simits to Mert in Atakent Park, return to Kantin.
  */
@@ -326,7 +326,7 @@ export class MissionSystem {
       const d = Math.hypot(playerPos.x - this.school.entrance.x, playerPos.z - this.school.entrance.z);
       if (d < 3.6) {
         this.step = 1;
-        this.cb.onToast('Okula Girdin', 'Mihri Can’ın matematik dersine yetiş — 6-G’de Sefa & Betül seni bekliyor!', 'gold');
+        this.cb.onToast('Okula Girdin', 'Mihrican’ın matematik dersine yetiş — 6-G’de Sefa & Betül yan yana seni bekliyor!', 'gold');
         this.refreshTarget();
       }
     }
@@ -338,8 +338,8 @@ export class MissionSystem {
         index: 1,
         total: 3,
         title: 'Sabah Yoklaması: 6-G',
-        objective: this.step === 0 ? 'Okulun ana giriş kapısından içeri gir' : '6-G sınıfında Sefa & Betül ile yoklama ver [E]',
-        hint: 'Mihri Can Matematik dersini anlatıyor; koridorda koşmadan sınıfa gir!',
+        objective: this.step === 0 ? 'Okulun ana giriş kapısından içeri gir' : '6-G sınıfında yan yana oturan Sefa & Betül ile yoklama ver [E]',
+        hint: 'Mihrican Matematik dersini anlatıyor; koridorda koşmadan sınıfa gir!',
         completedAll: false,
         score: this.score,
         targetPos: this.activeTarget,
