@@ -307,15 +307,20 @@ export function blackboardTexture(): THREE.Texture {
     ctx.fillStyle = '#25382e';
     ctx.fillRect(0, 0, 1024, 384);
     noise(ctx, 1024, 384, 0.06, 6000);
+    ctx.fillStyle = 'rgba(240,240,230,0.94)';
+    ctx.font = 'bold 58px Segoe UI, Arial';
+    ctx.fillText('6-G  •  MATEMATİK', 36, 78);
+    ctx.font = '34px Segoe UI, Arial';
+    ctx.fillStyle = '#fde68a';
+    ctx.fillText('Öğrt. Mihri Can', 680, 74);
     ctx.fillStyle = 'rgba(240,240,230,0.92)';
-    ctx.font = 'bold 64px Segoe UI, Arial';
-    ctx.fillText('6-G', 40, 90);
-    ctx.font = '40px Segoe UI, Arial';
-    ctx.fillText('25 Kasım — Matematik', 40, 160);
-    ctx.fillText('Kesirler: 3/4 + 1/8 = 7/8', 40, 230);
-    ctx.fillText('Ödev: s. 112, 1-10', 40, 300);
-    ctx.font = 'italic 34px Segoe UI, Arial';
-    ctx.fillText('Nöbetçi: Emre & Zeynep', 620, 350);
+    ctx.font = '38px Segoe UI, Arial';
+    ctx.fillText('1) Kesirler: 3/4 + 1/8 = 7/8', 36, 154);
+    ctx.fillText('2) Denklem: 2x + 6 = 14  →  x = 4', 36, 224);
+    ctx.fillText('Ödev: Ders Kitabı s. 112 (1–10)', 36, 294);
+    ctx.font = 'italic 32px Segoe UI, Arial';
+    ctx.fillStyle = '#a7f3d0';
+    ctx.fillText('Yoklama / Nöbetçi: Sefa & Betül', 520, 352);
     return toTexture(c, true, false);
   });
 }

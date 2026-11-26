@@ -72,8 +72,13 @@ export class HUD {
   private detentionEl: HTMLElement;
   private detentionSubEl: HTMLElement;
   private muteBtnEl: HTMLButtonElement;
+  private flashEl: HTMLElement;
+  private photoCardEl: HTMLElement;
+  private photoTitleEl: HTMLElement;
+  private photoSubEl: HTMLElement;
 
   private toastTimer = 0;
+  private photoTimer = 0;
   private minimapAccum = 0;
 
   constructor(
@@ -172,6 +177,13 @@ export class HUD {
         <span><b>M</b> Ses</span>
       </div>
 
+      <div class="camera-flash"></div>
+      <div class="photo-card">
+        <div class="photo-badge">📸 ANI YAKALANDI</div>
+        <div class="photo-title"></div>
+        <div class="photo-sub"></div>
+      </div>
+
       <button type="button" class="hud-panel mute-btn" title="Sesi Aç / Kapat (M)">🔊 Ses Açık [M]</button>
 
       <div class="detention-banner">
@@ -239,6 +251,10 @@ export class HUD {
     this.detentionEl = container.querySelector('.detention-banner')!;
     this.detentionSubEl = container.querySelector('.detention-sub')!;
     this.muteBtnEl = container.querySelector('.mute-btn')!;
+    this.flashEl = container.querySelector('.camera-flash')!;
+    this.photoCardEl = container.querySelector('.photo-card')!;
+    this.photoTitleEl = container.querySelector('.photo-title')!;
+    this.photoSubEl = container.querySelector('.photo-sub')!;
 
     this.playBtnEl.addEventListener('click', () => onPlayClick());
     this.muteBtnEl.addEventListener('click', (e) => {
@@ -250,6 +266,18 @@ export class HUD {
   setMuted(muted: boolean): void {
     this.muteBtnEl.classList.toggle('muted', muted);
     this.muteBtnEl.textContent = muted ? '🔇 Sessiz [M]' : '🔊 Ses Açık [M]';
+  }
+
+  /** Brief camera flash + Polaroid-style memory card notification. */
+  triggerPhotoMemory(title: string, subtitle: string): void {
+    this.flashEl.classList.add('flash');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this.flashEl.classList.remove('flash'));
+    });
+    this.photoTitleEl.textContent = title;
+    this.photoSubEl.textContent = subtitle;
+    this.photoCardEl.classList.add('visible');
+    this.photoTimer = 4.2;
   }
 
   setPaused(paused: boolean, startedOnce: boolean, highScore = 0): void {
@@ -279,6 +307,10 @@ export class HUD {
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toastBoxEl.classList.remove('visible');
+    }
+    if (this.photoTimer > 0) {
+      this.photoTimer -= dt;
+      if (this.photoTimer <= 0) this.photoCardEl.classList.remove('visible');
     }
 
     this.zoneNameEl.textContent = state.zoneLabel;

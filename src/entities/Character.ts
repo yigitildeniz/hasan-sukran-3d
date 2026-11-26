@@ -254,13 +254,21 @@ export const LOOKS = {
     skin: '#cf9c76', hair: '#151515', hairStyle: 'short', top: '#2f4f3a', topStyle: 'sweater',
     shirt: '#e8e2d4', bottom: '#4a4337', shoes: '#1b1b1b', glasses: true, mustache: '#151515', scale: 1.04,
   },
-  emre: {
+  sefa: {
     skin: '#e6b998', hair: '#3b2414', hairStyle: 'short', top: '#c62f2f', topStyle: 'hoodie',
     accent: '#ffffff', bottom: '#2e4a7a', shoes: '#ffffff', backpack: '#2f6fd6', scale: 0.82,
   },
-  zeynep: {
+  betul: {
     skin: '#e9c0a0', hair: '#5a3220', hairStyle: 'long', top: '#6a4c9c', topStyle: 'jacket',
     shirt: '#ffffff', bottom: '#2b2b3a', shoes: '#f0f0f0', scale: 0.8,
+  },
+  mihrican: {
+    skin: '#e5b899', hair: '#3d261a', hairStyle: 'long', top: '#1d4f6b', topStyle: 'jacket',
+    shirt: '#f6f2e8', bottom: '#252b38', shoes: '#1f1a18', glasses: true, scale: 0.96,
+  },
+  mert: {
+    skin: '#e0b08a', hair: '#251a12', hairStyle: 'short', top: '#2b7a52', topStyle: 'hoodie',
+    accent: '#f5c542', bottom: '#333b4a', shoes: '#f2f2f2', scale: 0.83,
   },
   simitci: {
     skin: '#c99670', hair: '#d0d0d0', hairStyle: 'cap', capColor: '#f4f4f0', top: '#6c6c6c', topStyle: 'apron',

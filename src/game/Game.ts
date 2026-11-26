@@ -63,6 +63,7 @@ export class Game {
   private rafId = 0;
   private schoolBellTimer = 24;
   private schoolBellHeardOnce = false;
+  private mathLessonIdx = 0;
 
   constructor(canvasHost: HTMLElement, hudHost: HTMLElement) {
     // Renderer
@@ -173,26 +174,53 @@ export class Game {
     this.friendlies = [
       new FriendlyNPC(
         {
-          id: 'emre',
-          name: 'Emre',
-          role: '6-G Sınıf Arkadaşı',
+          id: 'sefa',
+          name: 'Sefa',
+          role: '6-G Öğrencisi (Yoklama)',
           color: '#57d38c',
-          modelKey: 'emre',
-          look: LOOKS.emre,
-          pos: this.schoolSpots.classmateSeat,
-          heading: Math.PI,
+          modelKey: 'sefa',
+          look: LOOKS.sefa,
+          pos: this.schoolSpots.sefaSeat,
+          heading: 0, // facing the blackboard
           sit: true,
         },
         this.scene,
       ),
       new FriendlyNPC(
         {
-          id: 'zeynep',
-          name: 'Zeynep',
-          role: '6-G • Atakent Parkı',
+          id: 'betul',
+          name: 'Betül',
+          role: '6-G Öğrencisi (Yoklama)',
           color: '#a78bfa',
-          modelKey: 'zeynep',
-          look: LOOKS.zeynep,
+          modelKey: 'betul',
+          look: LOOKS.betul,
+          pos: this.schoolSpots.betulSeat,
+          heading: 0, // facing the blackboard
+          sit: true,
+        },
+        this.scene,
+      ),
+      new FriendlyNPC(
+        {
+          id: 'mihrican',
+          name: 'Mihri Can',
+          role: 'Matematik Öğretmeni • 6-G',
+          color: '#38bdf8',
+          modelKey: 'mihrican',
+          look: LOOKS.mihrican,
+          pos: this.schoolSpots.teacherSpot,
+          heading: Math.PI, // facing the class
+        },
+        this.scene,
+      ),
+      new FriendlyNPC(
+        {
+          id: 'mert',
+          name: 'Mert',
+          role: '6-G • Atakent Parkı',
+          color: '#34d399',
+          modelKey: 'mert',
+          look: LOOKS.mert,
           pos: this.atakentSpots.parkFriend,
           heading: -Math.PI * 0.75,
         },
@@ -213,7 +241,25 @@ export class Game {
       ),
     ];
 
-    this.marketDuo = new MarketDuo(this.scene, this.world.collision);
+    this.marketDuo = new MarketDuo(this.scene, this.world.collision, {
+      onEnesSpotted: () => {
+        this.hud.showToast('Kardeşler Market Önü', 'Bir dakika... Enes Batur mu geçiyor?!', 'gold', 2.4);
+      },
+      onNisaFreakout: () => {
+        this.audio.pickup();
+        this.hud.showToast('Nisa: "Aha inanamıyorum!!"', 'Enes Batur tam önlerinden geçiyor!', 'gold', 2.6);
+      },
+      onPhotoSnap: () => {
+        this.audio.cameraShutter();
+        this.hud.triggerPhotoMemory(
+          'Nisa & Enes Batur Hatırası',
+          'Fotoğraf çekildi! Kardeşler Market önünde unutulmaz anı.',
+        );
+      },
+      onSequenceComplete: () => {
+        this.hud.showToast('Enes Batur Uzaklaştı', 'Artık Zümra ve Nisa ile [E] tuşuyla konuşabilirsin.', 'green', 3.2);
+      },
+    });
 
     // HUD + Audio auto-unlock + Missions
     this.audio.attachAutoUnlock();
@@ -483,7 +529,7 @@ export class Game {
           }
         }
 
-        // Mission / shop / Zümra & Nisa / world interaction
+        // Mission / shop / Zümra & Nisa / Mihri Can math class interaction
         if (this.input.wasPressed('KeyE')) {
           const handled = this.missions.tryInteract(this.player.pos, !!this.player.vehicle);
           if (handled) {
@@ -498,6 +544,22 @@ export class Game {
                 'gold',
                 4.8,
               );
+            } else if (
+              !this.player.vehicle &&
+              Math.hypot(
+                this.player.pos.x - this.schoolSpots.teacherSpot.x,
+                this.player.pos.z - this.schoolSpots.teacherSpot.z,
+              ) <= 3.2
+            ) {
+              const mathLines = [
+                'Çocuklar kesirlerde payda eşitlemeyi unutmayın: 3/4 + 1/8 = 7/8!',
+                'Sefa, Betül tahtadaki 2x + 6 = 14 denklemini kim çözmek ister? x = 4!',
+                '6-G harikasınız! Matematik ödevi sayfa 112, 1–10 arası sorular.',
+              ];
+              const msg = mathLines[this.mathLessonIdx % mathLines.length];
+              this.mathLessonIdx += 1;
+              this.audio.interact();
+              this.hud.showToast('Mihri Can (Matematik Dersi)', msg, 'green', 4.4);
             }
           }
         }
@@ -652,6 +714,15 @@ export class Game {
     const shopPrompt = missionPrompt ? null : this.shops.getPrompt(this.player.pos, !!this.player.vehicle);
     const duoPrompt =
       missionPrompt || shopPrompt ? null : this.marketDuo.getPrompt(this.player.pos, !!this.player.vehicle);
+    const teacherPrompt =
+      missionPrompt || shopPrompt || duoPrompt || this.player.vehicle
+        ? null
+        : Math.hypot(
+              this.player.pos.x - this.schoolSpots.teacherSpot.x,
+              this.player.pos.z - this.schoolSpots.teacherSpot.z,
+            ) <= 3.2
+          ? 'Mihri Can’ın Matematik Dersini Dinle'
+          : null;
     const shopState = this.shops.hudState();
     this.hud.update(dt, {
       playerPos: this.player.pos,
@@ -664,7 +735,7 @@ export class Game {
       heat: this.heat.snapshot(),
       mission: this.missions.hudState(),
       shop: shopState,
-      interactPrompt: missionPrompt ?? shopPrompt ?? duoPrompt,
+      interactPrompt: missionPrompt ?? shopPrompt ?? duoPrompt ?? teacherPrompt,
       consumePrompt: shopState.noodleState === 'hot' ? 'Sıcak Noodle İç (+Enerji)' : null,
       vehiclePrompt: this.player.vehicle
         ? `${this.player.vehicle.name} aracından in`

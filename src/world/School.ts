@@ -11,7 +11,9 @@ export interface SchoolSpots {
   entrance: THREE.Vector3;
   lobby: THREE.Vector3;
   desk6G: THREE.Vector3;
-  classmateSeat: THREE.Vector3;
+  sefaSeat: THREE.Vector3;
+  betulSeat: THREE.Vector3;
+  teacherSpot: THREE.Vector3;
   kantin: THREE.Vector3;
   detention: THREE.Vector3;
   pages: THREE.Vector3[];
@@ -457,7 +459,9 @@ export function buildSchool(ctx: WorldContext): SchoolSpots {
     entrance: V(-10, FLOOR, -15),
     lobby: V(-10, FLOOR, -18.6),
     desk6G: V(g6.x0 + 4 + 3.6 - 0.4 - 0.25, FLOOR, -24.6 + 0.6),
-    classmateSeat: V(g6.x0 + 4 + 0.8 - 0.4 - 0.25, FLOOR, -24.6 + 0.6),
+    sefaSeat: V(g6.x0 + 4 + 0.8 - 0.4 - 0.25, FLOOR, -24.6 + 0.6),
+    betulSeat: V(g6.x0 + 4 + 3.6 - 0.4 - 0.25, FLOOR, -26.2 + 0.6),
+    teacherSpot: V(g6.x0 + 4.3, FLOOR, -28.0),
     kantin: V(B.x0 - 0.9, 0, -6),
     detention: V(-10, FLOOR, -18.8),
     pages: [V(-22, 0, -35.5), V(39.5, 0, -18), V(-40.5, 0, 21.5)],

@@ -342,6 +342,16 @@ export class SoundEngine {
     this.tone(f, f * 1.45, 0.09, 'sine', 0.045);
   }
 
+  /** Crisp camera shutter click + flash charge ping for photo moments. */
+  cameraShutter(): void {
+    this.noise(0.035, 'highpass', 2600, 0.16, 1.2);
+    this.tone(1600, 520, 0.04, 'square', 0.06);
+    setTimeout(() => {
+      this.noise(0.045, 'bandpass', 3200, 0.13, 1.4);
+      this.tone(1100, 380, 0.05, 'triangle', 0.05);
+    }, 65);
+  }
+
   // ------------------------------------------------------------------ primitives
   private tone(f0: number, f1: number, dur: number, type: OscillatorType, vol: number): void {
     if (this._muted || !this.ctx || !this.master) return;

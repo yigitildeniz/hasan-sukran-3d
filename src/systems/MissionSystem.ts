@@ -29,9 +29,9 @@ interface PageItem {
 
 /**
  * 3-mission starter campaign for Atakent: Okul Hikâyesi:
- * 1. "Sabah Yoklaması: 6-G" — Enter school, reach your desk in 6-G, talk to Emre.
+ * 1. "Sabah Yoklaması: 6-G" — Enter school, attend Mihri Can's math class & check in with Sefa & Betül.
  * 2. "Kayıp Sınav Kâğıtları" — Recover 3 blown-away study pages in the school grounds & return to 6-G.
- * 3. "Atakent Simit Operasyonu" — Ride a vehicle to Simitçi Amca, deliver warm simits to Zeynep in Atakent Park, return to Kantin.
+ * 3. "Atakent Simit Operasyonu" — Ride a vehicle to Simitçi Amca, deliver warm simits to Mert in Atakent Park, return to Kantin.
  */
 export class MissionSystem {
   missionIndex = 0; // 0, 1, 2; 3 = free roam
@@ -163,10 +163,10 @@ export class MissionSystem {
       if (this.step === 0) {
         this.activeTarget = this.school.entrance;
       } else {
-        this.activeTarget = this.school.classmateSeat;
-        this.interactLabel = 'Emre ile konuş (6-G Yoklama)';
-        this.interactPos = this.school.classmateSeat;
-        this.interactRadius = 3.2;
+        this.activeTarget = this.school.sefaSeat;
+        this.interactLabel = 'Sefa & Betül ile yoklama ver (6-G)';
+        this.interactPos = this.school.sefaSeat;
+        this.interactRadius = 3.4;
       }
     } else if (this.missionIndex === 1) {
       this.targetColor = '#57d38c';
@@ -192,7 +192,7 @@ export class MissionSystem {
         this.interactRadius = 4.2;
       } else if (this.step === 1) {
         this.activeTarget = this.atakent.parkFriend;
-        this.interactLabel = 'Zeynep’e simitleri teslim et';
+        this.interactLabel = 'Mert’e simitleri teslim et';
         this.interactPos = this.atakent.parkFriend;
         this.interactRadius = 4.2;
       } else {
@@ -263,7 +263,7 @@ export class MissionSystem {
         this.step = 1;
         this.score += 100;
         this.cb.onPickup();
-        this.cb.onToast('Sıcak Simitler Alındı', 'Atakent Parkı’ndaki Zeynep’e ulaştır!' + (inVehicle ? '' : ' ([F] ile araca binebilirsin)'), 'gold');
+        this.cb.onToast('Sıcak Simitler Alındı', 'Atakent Parkı’ndaki Mert’e ulaştır!' + (inVehicle ? '' : ' ([F] ile araca binebilirsin)'), 'gold');
         this.refreshTarget();
         return true;
       }
@@ -271,7 +271,7 @@ export class MissionSystem {
         this.step = 2;
         this.score += 150;
         this.cb.onPickup();
-        this.cb.onToast('Zeynep: Süpersin!', 'Şimdi okul bahçesindeki Kantin’e dön.', 'green');
+        this.cb.onToast('Mert: Süpersin!', 'Şimdi okul bahçesindeki Kantin’e dön.', 'green');
         this.refreshTarget();
         return true;
       }
@@ -326,7 +326,7 @@ export class MissionSystem {
       const d = Math.hypot(playerPos.x - this.school.entrance.x, playerPos.z - this.school.entrance.z);
       if (d < 3.6) {
         this.step = 1;
-        this.cb.onToast('Okula Girdin', 'Koridorda koşmadan 6-G sınıfındaki Emre’ye ulaş!', 'gold');
+        this.cb.onToast('Okula Girdin', 'Mihri Can’ın matematik dersine yetiş — 6-G’de Sefa & Betül seni bekliyor!', 'gold');
         this.refreshTarget();
       }
     }
@@ -338,8 +338,8 @@ export class MissionSystem {
         index: 1,
         total: 3,
         title: 'Sabah Yoklaması: 6-G',
-        objective: this.step === 0 ? 'Okulun ana giriş kapısından içeri gir' : '6-G sınıfına git ve Emre ile konuş [E]',
-        hint: 'Koridorda koşma; Müdür ve yardımcıları yakalarsa uyarı alırsın!',
+        objective: this.step === 0 ? 'Okulun ana giriş kapısından içeri gir' : '6-G sınıfında Sefa & Betül ile yoklama ver [E]',
+        hint: 'Mihri Can Matematik dersini anlatıyor; koridorda koşmadan sınıfa gir!',
         completedAll: false,
         score: this.score,
         targetPos: this.activeTarget,
@@ -368,7 +368,7 @@ export class MissionSystem {
         this.step === 0
           ? 'Atakent Caddesi’ndeki Simitçi Amca’ya git [E]'
           : this.step === 1
-            ? 'Atakent Parkı’ndaki Zeynep’e simitleri götür [E]'
+            ? 'Atakent Parkı’ndaki Mert’e simitleri götür [E]'
             : 'Okul bahçesindeki Kantin’e dön [E]';
       return {
         index: 3,
