@@ -262,6 +262,14 @@ export const LOOKS = {
     skin: '#e9c0a0', hair: '#5a3220', hairStyle: 'long', top: '#6a4c9c', topStyle: 'jacket',
     shirt: '#ffffff', bottom: '#2b2b3a', shoes: '#f0f0f0', scale: 0.8,
   },
+  lena: {
+    skin: '#ecd0b8', hair: '#3b2316', hairStyle: 'long', top: '#f6f6f4', topStyle: 'sweater',
+    shirt: '#ffffff', bottom: '#2c364a', shoes: '#e9ecf0', glasses: true, scale: 0.8,
+  },
+  ihsan: {
+    skin: '#e3b693', hair: '#1e1b18', hairStyle: 'short', top: '#24587a', topStyle: 'hoodie',
+    accent: '#f5c542', bottom: '#2b303a', shoes: '#f2f2f2', scale: 0.83,
+  },
   mihrican: {
     skin: '#e5b899', hair: '#3d261a', hairStyle: 'long', top: '#1d4f6b', topStyle: 'jacket',
     shirt: '#f6f2e8', bottom: '#252b38', shoes: '#1f1a18', glasses: true, scale: 0.96,
